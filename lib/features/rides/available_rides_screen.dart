@@ -412,7 +412,6 @@ class _RideCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String? badge = ride['badge'] as String?;
-    final bool oneSeatLeft = ride['seats'] == 1;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -572,7 +571,6 @@ class _RideCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Price + seats — Expanded forces finite width on this side
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,10 +604,6 @@ class _RideCard extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // CRITICAL FIX: SizedBox with FIXED width and height
-              // Never use ElevatedButton freely in a Row with min constraints
-              // Always wrap with SizedBox(width: X, height: Y)
               SizedBox(
                 width: 100,
                 height: 40,
@@ -685,4 +679,3 @@ class _DriverBadge extends StatelessWidget {
     );
   }
 }
-
