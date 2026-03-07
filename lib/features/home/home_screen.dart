@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uniride/core/theme.dart';
+import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -17,6 +18,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
+      bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
       body: Center(
         child: Text(
           'Home – próximamente',
