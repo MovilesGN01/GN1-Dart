@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _HomeColors {
-  static const primary      = Color(0xFF1F5DFF);
-  static const background   = Color(0xFFFFFFFF);
-  static const textPrimary  = Color(0xFF111111);
+  static const primary       = Color(0xFF1F5DFF);
+  static const background    = Color(0xFFFFFFFF);
+  static const textPrimary   = Color(0xFF111111);
   static const textSecondary = Color(0xFF555555);
-  static const muted        = Color(0xFF94A3B8);
-  static const cardSurface  = Color(0xFFF8FAFC);
-  static const border       = Color(0xFFE5E7EB);
-  static const weatherBg    = Color(0xFFEFF6FF);
-  static const amber        = Color(0xFFF59E0B);
-  static const badgeBg      = Color(0xFFE8F5E9);
-  static const badgeText    = Color(0xFF2E7D32);
+  static const muted         = Color(0xFF94A3B8);
+  static const cardSurface   = Color(0xFFF8FAFC);
+  static const border        = Color(0xFFE5E7EB);
+  static const weatherBg     = Color(0xFFEFF6FF);
+  static const amber         = Color(0xFFF59E0B);
+  static const badgeBg       = Color(0xFFE8F5E9);
+  static const badgeText     = Color(0xFF2E7D32);
 }
 
 // ── Mock data model ──────────────────────────────────────────────────────────
@@ -46,7 +47,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _showWeatherBanner = true;
-  int _selectedIndex = 0;
 
   static const _mockRides = [
     _RideData(
@@ -74,13 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ];
 
-  void _onNavTap(int index) {
-    setState(() => _selectedIndex = index);
-    if (index == 0) context.go('/home');
-    if (index == 1) context.go('/rides');
-    // index 2, 3: no logic yet
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,37 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: _HomeColors.background,
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onNavTap,
-        selectedItemColor: _HomeColors.primary,
-        unselectedItemColor: _HomeColors.muted,
-        backgroundColor: _HomeColors.background,
-        type: BottomNavigationBarType.fixed,
-        selectedLabelStyle: GoogleFonts.poppins(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.directions_car_outlined),
-            label: 'Rides',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.group_outlined),
-            label: 'Community',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: 'Profile',
-          ),
-        ],
-      ),
+      bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
