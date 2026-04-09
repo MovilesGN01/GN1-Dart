@@ -8,7 +8,6 @@ import '../../data/models/ride_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/rides/ride_viewmodel.dart';
 
-import 'package:provider/provider.dart';
 import 'package:uniride/features/chatbot/data/chatbot_service.dart';
 import 'package:uniride/features/chatbot/presentation/chatbot_sheet.dart';
 import 'package:uniride/features/chatbot/state/chatbot_controller.dart';
