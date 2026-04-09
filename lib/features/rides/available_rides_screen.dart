@@ -16,8 +16,10 @@ abstract final class _RidesColors {
   static const cardSurface   = Color(0xFFF8FAFC);
   static const border        = Color(0xFFE5E7EB);
   static const urgent        = Color(0xFFFF3B30);
+  static const success       = Color(0xFF34C759);
   static const successLight  = Color(0xFFE8F5E9);
   static const successText   = Color(0xFF2E7D32);
+  static const purple        = Color(0xFF7C3AED);
   static const purpleLight   = Color(0xFFF3E8FF);
   static const purpleText    = Color(0xFF6D28D9);
   static const warningAmber  = Color(0xFFF59E0B);
@@ -428,237 +430,241 @@ class _RideCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final badge = _getBadge(ride);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _RidesColors.background,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _RidesColors.border),
-        boxShadow: const [
-          BoxShadow(
-            offset: Offset(0, 2),
-            blurRadius: 8,
-            color: Color(0x0A000000),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ROW 1 — driver info + badge
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: _RidesColors.primary,
-                child: Text(
-                  ride.driverName[0],
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _RidesColors.background,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      ride.driverName,
-                      style: GoogleFonts.poppins(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: _RidesColors.textPrimary,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.star,
-                          size: 14,
-                          color: _RidesColors.warningAmber,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          ride.reputationScore.toString(),
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: _RidesColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (badge != null) _DriverBadge(badge: badge),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // ROW 2 — route + time
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: _RidesColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          ride.origin,
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: _RidesColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      margin: const EdgeInsets.only(left: 3),
-                      width: 1,
-                      height: 14,
-                      color: _RidesColors.border,
-                    ),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 12,
-                          color: _RidesColors.muted,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          ride.destination,
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: _RidesColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _formatDepartureTime(ride.departureTime),
+    // GestureDetector from develop — navigates to ride detail screen
+    return GestureDetector(
+      onTap: () => context.push('/rides/details', extra: ride),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _RidesColors.background,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _RidesColors.border),
+          boxShadow: const [
+            BoxShadow(
+              offset: Offset(0, 2),
+              blurRadius: 8,
+              color: Color(0x0A000000),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ROW 1 — driver info + badge
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: _RidesColors.primary,
+                  child: Text(
+                    ride.driverName[0],
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: _RidesColors.primary,
+                      color: _RidesColors.background,
                     ),
                   ),
-                  Text(
-                    'ETA ${ride.eta}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: _RidesColors.muted,
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        ride.driverName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _RidesColors.textPrimary,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star,
+                            size: 14,
+                            color: _RidesColors.warningAmber,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            ride.reputationScore.toString(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: _RidesColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(color: _RidesColors.border, height: 1),
-          const SizedBox(height: 12),
+                ),
+                if (badge != null) _DriverBadge(badge: badge),
+              ],
+            ),
+            const SizedBox(height: 12),
 
-          // ROW 3 — price + seats + reserve button
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            // ROW 2 — route + time
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: _RidesColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            ride.origin,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: _RidesColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(left: 3),
+                        width: 1,
+                        height: 14,
+                        color: _RidesColors.border,
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 12,
+                            color: _RidesColors.muted,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            ride.destination,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: _RidesColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _formatPrice(ride.price),
+                      _formatDepartureTime(ride.departureTime),
                       style: GoogleFonts.poppins(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: _RidesColors.textPrimary,
+                        color: _RidesColors.primary,
                       ),
                     ),
-                    if (ride.seatsAvailable == 1)
-                      Text(
-                        'Only 1 seat left!',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _RidesColors.urgent,
-                        ),
-                      )
-                    else
-                      Text(
-                        '${ride.seatsAvailable} seats left',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: _RidesColors.muted,
-                        ),
+                    Text(
+                      'ETA ${ride.eta}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: _RidesColors.muted,
                       ),
+                    ),
                   ],
                 ),
-              ),
-              SizedBox(
-                width: 100,
-                height: 40,
-                child: ElevatedButton(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Ride reserved with ${ride.driverName}!',
-                        style: GoogleFonts.poppins(color: Colors.white),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(color: _RidesColors.border, height: 1),
+            const SizedBox(height: 12),
+
+            // ROW 3 — price + seats + reserve button
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatPrice(ride.price),
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: _RidesColors.textPrimary,
+                        ),
                       ),
+                      if (ride.seatsAvailable == 1)
+                        Text(
+                          'Only 1 seat left!',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _RidesColors.urgent,
+                          ),
+                        )
+                      else
+                        Text(
+                          '${ride.seatsAvailable} seats left',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: _RidesColors.muted,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: 100,
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Ride reserved with ${ride.driverName}!',
+                          style: GoogleFonts.poppins(color: Colors.white),
+                        ),
+                        backgroundColor: _RidesColors.primary,
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
                       backgroundColor: _RidesColors.primary,
-                      duration: const Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.zero,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _RidesColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.zero,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
-                    'Reserve',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                    child: Text(
+                      'Reserve',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
