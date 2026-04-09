@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:uniride/presentation/viewmodels/auth_viewmodel.dart';
+
+import 'auth_viewmodel.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _LoginColors {
@@ -31,26 +32,14 @@ class _LoginScreenState extends State<LoginScreen> {
   static const _errorColor = Color(0xFFFF3B30);
 
   Future<void> _login() async {
-    final authVm = context.read<AuthViewModel>();
-    await authVm.signIn(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
-    if (!mounted) return;
-    if (authVm.isAuthenticated) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    final authViewModel = context.read<AuthViewModel>();
+    final success = await authViewModel.signIn(email, password);
+
+    if (success && mounted) {
       context.go('/home');
-      return;
-    }
-    if (authVm.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            authVm.errorMessage!,
-            style: GoogleFonts.poppins(color: _LoginColors.background),
-          ),
-          backgroundColor: _errorColor,
-        ),
-      );
     }
   }
 
@@ -63,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthViewModel>().isLoading;
+    final authViewModel = context.watch<AuthViewModel>();
 
     return Scaffold(
       backgroundColor: _LoginColors.background,
@@ -104,32 +93,39 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 32),
 
-              ElevatedButton(
-                onPressed: isLoading ? null : _login,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _LoginColors.primary,
-                  foregroundColor: _LoginColors.background,
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                  textStyle: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+              authViewModel.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ElevatedButton(
+                      onPressed: _login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _LoginColors.primary,
+                        foregroundColor: _LoginColors.background,
+                        minimumSize: const Size(double.infinity, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                        textStyle: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      child: const Text('Iniciar Sesión'),
+                    ),
+
+              if (authViewModel.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    authViewModel.errorMessage!,
+                    style: const TextStyle(
+                      color: _errorColor,
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-                child: isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          color: _LoginColors.background,
-                          strokeWidth: 2.5,
-                        ),
-                      )
-                    : const Text('Iniciar Sesión'),
-              ),
+
               const SizedBox(height: 16),
 
               Row(

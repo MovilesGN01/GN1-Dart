@@ -3,7 +3,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
+
+import '../auth/auth_viewmodel.dart';
 
 class NfcAccessScreen extends StatefulWidget {
   const NfcAccessScreen({super.key});
@@ -137,7 +140,11 @@ class _NfcAccessScreenState extends State<NfcAccessScreen>
                 ],
               ),
               const SizedBox(height: 18),
-              _AccessPassCard(authorized: authorized),
+              _AccessPassCard(
+                authorized: authorized,
+                userName: context.watch<AuthViewModel>().currentUser?.name ?? 'Usuario',
+                userEmail: context.watch<AuthViewModel>().currentUser?.email ?? '',
+              ),
               const SizedBox(height: 16),
               const _TipsCard(),
             ],
@@ -353,9 +360,15 @@ class _NfcScanner extends StatelessWidget {
 }
 
 class _AccessPassCard extends StatelessWidget {
-  const _AccessPassCard({required this.authorized});
+  const _AccessPassCard({
+    required this.authorized,
+    required this.userName,
+    required this.userEmail,
+  });
 
   final bool authorized;
+  final String userName;
+  final String userEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -400,9 +413,9 @@ class _AccessPassCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          _passRow('Passenger', 'Felipe Cabrito'),
+          _passRow('Passenger', userName),
           const Divider(height: 24),
-          _passRow('Institutional email', 'f.cabrito@uniandes.edu.co'),
+          _passRow('Institutional email', userEmail),
           const Divider(height: 24),
           _passRow('Access mode', 'Uniandes ID / Mobile NFC'),
           const Divider(height: 24),

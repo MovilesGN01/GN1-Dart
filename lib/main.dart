@@ -1,14 +1,33 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uniride/core/routes.dart';
-import 'package:uniride/core/theme.dart';
-import 'package:uniride/data/repositories/impl/mock_ride_repository.dart';
-import 'package:uniride/data/repositories/impl/mock_user_repository.dart';
-import 'package:uniride/presentation/viewmodels/auth_viewmodel.dart';
-import 'package:uniride/presentation/viewmodels/ride_viewmodel.dart';
 
-void main() {
-  runApp(const UniRideApp());
+import 'core/firebase_options.dart';
+import 'core/routes.dart';
+import 'core/theme.dart';
+import 'data/repositories/impl/firebase_auth_repository.dart';
+import 'data/repositories/impl/firebase_ride_repository.dart';
+import 'features/auth/auth_viewmodel.dart';
+import 'features/rides/ride_viewmodel.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => RideViewModel(FirebaseRideRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => AuthViewModel(FirebaseAuthRepository()),
+        ),
+      ],
+      child: const UniRideApp(),
+    ),
+  );
 }
 
 class UniRideApp extends StatelessWidget {
@@ -16,21 +35,11 @@ class UniRideApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => RideViewModel(MockRideRepository()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => AuthViewModel(MockUserRepository()),
-        ),
-      ],
-      child: MaterialApp.router(
-        title: 'UniRide',
-        theme: uniRideTheme,
-        routerConfig: appRouter,
-        debugShowCheckedModeBanner: false,
-      ),
+    return MaterialApp.router(
+      title: 'UniRide',
+      theme: uniRideTheme,
+      routerConfig: appRouter,
+      debugShowCheckedModeBanner: false,
     );
   }
 }
