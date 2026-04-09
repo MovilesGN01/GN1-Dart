@@ -67,11 +67,11 @@ class FirebaseRideRepository implements RideRepository {
         final weatherCode = (currentWeather['weathercode'] as num?)?.toInt();
 
         const rainyCodes = {
-          51, 53, 55, // drizzle
-          61, 63, 65, // rain
-          66, 67, // freezing rain
-          80, 81, 82, // rain showers
-          95, 96, 99, // thunderstorm
+          51, 53, 55,
+          61, 63, 65,
+          66, 67,
+          80, 81, 82,
+          95, 96, 99,
         };
 
         hasRain = weatherCode != null && rainyCodes.contains(weatherCode);
@@ -113,13 +113,13 @@ class FirebaseRideRepository implements RideRepository {
       );
     } on FirebaseFunctionsException catch (e) {
       throw Exception(_mapFunctionsError(e));
-    } catch (e) {
+    } catch (_) {
       throw Exception('No se pudieron cargar los detalles del ride.');
     }
   }
 
   @override
-  Future<void> reserveRide(String rideId) async {
+  Future<void> reserveRide(String rideId, String userId) async {
     try {
       final callable = _functions.httpsCallable(
         'reserveRide',
@@ -130,10 +130,11 @@ class FirebaseRideRepository implements RideRepository {
 
       await callable.call<Map<String, dynamic>>({
         'rideId': rideId,
+        'userId': userId,
       });
     } on FirebaseFunctionsException catch (e) {
       throw Exception(_mapFunctionsError(e));
-    } catch (e) {
+    } catch (_) {
       throw Exception('No se pudo reservar el ride.');
     }
   }
