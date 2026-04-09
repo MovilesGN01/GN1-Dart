@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:uniride/presentation/viewmodels/auth_viewmodel.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _LoginColors {
@@ -28,21 +30,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const _errorColor = Color(0xFFFF3B30);
 
-  void _login() {
-    final email = _emailController.text.trim();
-    if (!email.endsWith('@uniandes.edu.co')) {
+  Future<void> _login() async {
+    final authVm = context.read<AuthViewModel>();
+    await authVm.signIn(
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
+    if (!mounted) return;
+    if (authVm.isAuthenticated) {
+      context.go('/home');
+      return;
+    }
+    if (authVm.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Debes usar tu correo institucional @uniandes.edu.co',
+            authVm.errorMessage!,
             style: GoogleFonts.poppins(color: _LoginColors.background),
           ),
           backgroundColor: _errorColor,
         ),
       );
-      return;
     }
-    context.go('/home');
   }
 
   @override
@@ -54,6 +63,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = context.watch<AuthViewModel>().isLoading;
+
     return Scaffold(
       backgroundColor: _LoginColors.background,
       resizeToAvoidBottomInset: true,
@@ -94,7 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
 
               ElevatedButton(
-                onPressed: _login,
+                onPressed: isLoading ? null : _login,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _LoginColors.primary,
                   foregroundColor: _LoginColors.background,
@@ -108,7 +119,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: const Text('Iniciar Sesión'),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: _LoginColors.background,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : const Text('Iniciar Sesión'),
               ),
               const SizedBox(height: 16),
 
