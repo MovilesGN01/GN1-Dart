@@ -2,44 +2,48 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:uniride/data/models/ride_model.dart';
-import 'package:uniride/presentation/viewmodels/ride_viewmodel.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
+
+import '../../data/models/ride_model.dart';
+import '../../features/rides/ride_viewmodel.dart';
 
 // ── Local colour palette ──────────────────────────────────────────────────────
 abstract final class _RidesColors {
-  static const primary       = Color(0xFF1F5DFF);
-  static const background    = Color(0xFFFFFFFF);
-  static const textPrimary   = Color(0xFF111111);
+  static const primary = Color(0xFF1F5DFF);
+  static const background = Color(0xFFFFFFFF);
+  static const textPrimary = Color(0xFF111111);
   static const textSecondary = Color(0xFF555555);
-  static const muted         = Color(0xFF94A3B8);
-  static const cardSurface   = Color(0xFFF8FAFC);
-  static const border        = Color(0xFFE5E7EB);
-  static const urgent        = Color(0xFFFF3B30);
-  static const success       = Color(0xFF34C759);
-  static const successLight  = Color(0xFFE8F5E9);
-  static const successText   = Color(0xFF2E7D32);
-  static const purple        = Color(0xFF7C3AED);
-  static const purpleLight   = Color(0xFFF3E8FF);
-  static const purpleText    = Color(0xFF6D28D9);
-  static const warningAmber  = Color(0xFFF59E0B);
+  static const muted = Color(0xFF94A3B8);
+  static const cardSurface = Color(0xFFF8FAFC);
+  static const border = Color(0xFFE5E7EB);
+  static const urgent = Color(0xFFFF3B30);
+  static const success = Color(0xFF34C759);
+  static const successLight = Color(0xFFE8F5E9);
+  static const successText = Color(0xFF2E7D32);
+  static const purple = Color(0xFF7C3AED);
+  static const purpleLight = Color(0xFFF3E8FF);
+  static const purpleText = Color(0xFF6D28D9);
+  static const warningAmber = Color(0xFFF59E0B);
 }
 
-// ── Display helpers ───────────────────────────────────────────────────────────
-String _formatDepartureTime(DateTime dt) {
-  final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-  final minute = dt.minute.toString().padLeft(2, '0');
-  final period = dt.hour < 12 ? 'AM' : 'PM';
-  return '$hour:$minute $period';
+// ── Helpers ───────────────────────────────────────────────────────────────────
+String _fmtTime(DateTime dt) {
+  final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+  final m = dt.minute.toString().padLeft(2, '0');
+  final p = dt.hour >= 12 ? 'PM' : 'AM';
+  return '$h:$m $p';
 }
 
-String _formatPrice(double price) {
-  return '\$${(price / 1000).toStringAsFixed(0)}.000';
+String _fmtPrice(double p) {
+  final n = p.toInt();
+  if (n >= 1000) {
+    return '\$${n ~/ 1000}.${(n % 1000).toString().padLeft(3, '0')}';
+  }
+  return '\$$n';
 }
 
-String? _getBadge(RideModel ride) {
-  if (ride.isFemaleDriver) return 'FEMALE DRIVER';
-  if (ride.reputationScore >= 4.8) return 'HIGH RELIABILITY';
+String? _badge(RideModel r) {
+  if (r.driverRating >= 4.8) return 'HIGH RELIABILITY';
   return null;
 }
 
@@ -58,17 +62,26 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final vm = context.read<RideViewModel>();
-      if (vm.rides.isEmpty && !vm.isLoading) {
-        vm.loadRides();
-      }
-    });
+    context.read<RideViewModel>().loadAvailableRides();
+  }
+
+  List<RideModel> _applyFilter(List<RideModel> rides) {
+    switch (_activeFilter) {
+      case 'High Reliability':
+        return rides.where((r) => r.driverRating >= 4.8).toList();
+      case '4.5+ Rating':
+        return rides.where((r) => r.driverRating >= 4.5).toList();
+      case 'Female Driver':
+        return rides; // no gender field in Firestore yet
+      default:
+        return rides;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final rideVm = context.watch<RideViewModel>();
+    final vm = context.watch<RideViewModel>();
+    final filtered = _applyFilter(vm.rides);
 
     return Scaffold(
       backgroundColor: _RidesColors.background,
@@ -116,20 +129,11 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Search summary
-              _SearchSummaryCard(
-                selectedDeparture: _selectedDeparture,
-                onDepartureChanged: (val) =>
-                    setState(() => _selectedDeparture = val),
-              ),
-
-              // Filter chips
+              _buildSearchSummaryCard(),
               _FilterChipsRow(
                 activeFilter: _activeFilter,
                 onFilterChanged: (val) => setState(() => _activeFilter = val),
               ),
-
-              // Section header
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -145,15 +149,30 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                   ),
                 ),
               ),
-
-              // Ride cards or loading indicator
-              if (rideVm.isLoading)
+              if (vm.isLoading)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: _RidesColors.primary,
-                      strokeWidth: 2,
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (vm.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    vm.errorMessage!,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: Colors.red,
+                    ),
+                  ),
+                )
+              else if (filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'No rides match this filter.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: _RidesColors.muted,
                     ),
                   ),
                 )
@@ -161,8 +180,8 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                 ListView.builder(
                   physics: const NeverScrollableScrollPhysics(),
                   shrinkWrap: true,
-                  itemCount: rideVm.rides.length,
-                  itemBuilder: (_, i) => _RideCard(ride: rideVm.rides[i]),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) => _RideCard(ride: filtered[i]),
                 ),
               const SizedBox(height: 16),
             ],
@@ -171,21 +190,8 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
       ),
     );
   }
-}
 
-// ── Private widgets ───────────────────────────────────────────────────────────
-
-class _SearchSummaryCard extends StatelessWidget {
-  const _SearchSummaryCard({
-    required this.selectedDeparture,
-    required this.onDepartureChanged,
-  });
-
-  final String selectedDeparture;
-  final ValueChanged<String> onDepartureChanged;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildSearchSummaryCard() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -197,7 +203,6 @@ class _SearchSummaryCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // FROM / TO row
           IntrinsicHeight(
             child: Row(
               children: [
@@ -279,8 +284,6 @@ class _SearchSummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Departure row
           Row(
             children: [
               const Icon(
@@ -300,7 +303,7 @@ class _SearchSummaryCard extends StatelessWidget {
               Expanded(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: selectedDeparture,
+                    value: _selectedDeparture,
                     isDense: true,
                     isExpanded: true,
                     style: GoogleFonts.poppins(
@@ -316,7 +319,8 @@ class _SearchSummaryCard extends StatelessWidget {
                     items: ['Now', '7:00 AM', '7:30 AM', '8:00 AM', '8:30 AM']
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                         .toList(),
-                    onChanged: (val) => onDepartureChanged(val!),
+                    onChanged: (val) =>
+                        setState(() => _selectedDeparture = val!),
                   ),
                 ),
               ),
@@ -350,6 +354,8 @@ class _SearchSummaryCard extends StatelessWidget {
     );
   }
 }
+
+// ── Private widgets ───────────────────────────────────────────────────────────
 
 class _FilterChipsRow extends StatelessWidget {
   const _FilterChipsRow({
@@ -428,11 +434,24 @@ class _RideCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge = _getBadge(ride);
+    final String? badge = _badge(ride);
+    final String timeStr = _fmtTime(ride.departureTime);
+    final String priceStr = _fmtPrice(ride.price);
 
-    // GestureDetector from develop — navigates to ride detail screen
     return GestureDetector(
-      onTap: () => context.push('/rides/details', extra: ride),
+      onTap: () => context.push('/rides/details', extra: {
+        'name': ride.driverName,
+        'initial': ride.driverName.isNotEmpty ? ride.driverName[0] : '?',
+        'rating': ride.driverRating,
+        'from': ride.origin,
+        'to': ride.destination,
+        'time': timeStr,
+        'eta': '--',
+        'price': priceStr,
+        'seats': ride.seatsAvailable,
+        'badge': badge,
+        'isFemaleDriver': false,
+      }),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         padding: const EdgeInsets.all(16),
@@ -458,7 +477,7 @@ class _RideCard extends StatelessWidget {
                   radius: 22,
                   backgroundColor: _RidesColors.primary,
                   child: Text(
-                    ride.driverName[0],
+                    ride.driverName.isNotEmpty ? ride.driverName[0] : '?',
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -489,7 +508,7 @@ class _RideCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            ride.reputationScore.toString(),
+                            ride.driverRating.toStringAsFixed(1),
                             style: GoogleFonts.poppins(
                               fontSize: 13,
                               color: _RidesColors.textSecondary,
@@ -565,7 +584,7 @@ class _RideCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _formatDepartureTime(ride.departureTime),
+                      timeStr,
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -573,7 +592,7 @@ class _RideCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'ETA ${ride.eta}',
+                      'ETA --',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: _RidesColors.muted,
@@ -597,7 +616,7 @@ class _RideCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _formatPrice(ride.price),
+                        priceStr,
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
