@@ -1,4 +1,6 @@
 // MockImplementation — to be replaced with FirebaseRideRepository in next iteration
+import 'package:uniride/data/models/ride_details_model.dart';
+
 import '../ride_repository.dart';
 import '../../models/ride_model.dart';
 
@@ -53,5 +55,11 @@ class MockRideRepository implements RideRepository {
         seatsAvailable: _rides[index].seatsAvailable - 1,
       );
     }
+  }
+
+  @override
+  Future<RideDetailsModel> getRideDetails(String rideId) {
+    // TODO: implement getRideDetails
+    throw UnimplementedError();
   }
 }
