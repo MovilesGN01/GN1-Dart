@@ -12,12 +12,21 @@ class RideViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Search state (Feature 3 / Feature 5)
+  bool _isSearchMode = false;
+  String _searchOrigin = '';
+  String _searchDestination = '';
+
   List<RideModel> get rides => _rides;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get isSearchMode => _isSearchMode;
+  String get searchOrigin => _searchOrigin;
+  String get searchDestination => _searchDestination;
 
   Future<void> loadAvailableRides() async {
     _isLoading = true;
+    _isSearchMode = false;
     _errorMessage = null;
     notifyListeners();
 
@@ -31,8 +40,14 @@ class RideViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSearchTerms(String origin, String destination) {
+    _searchOrigin = origin;
+    _searchDestination = destination;
+  }
+
   Future<void> loadMatchingRides(String userId) async {
     _isLoading = true;
+    _isSearchMode = true;
     _errorMessage = null;
     notifyListeners();
 

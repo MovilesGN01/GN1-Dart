@@ -16,6 +16,8 @@ class MockRideRepository implements RideRepository {
       seatsAvailable: 3,
       status: 'available',
       zone: 'norte',
+      gender: 'male',
+      punctualityRate: 0.95,
     ),
     RideModel(
       id: 'mock-ride-2',
@@ -29,6 +31,23 @@ class MockRideRepository implements RideRepository {
       seatsAvailable: 2,
       status: 'available',
       zone: 'norte',
+      gender: 'female',
+      punctualityRate: 0.88,
+    ),
+    RideModel(
+      id: 'mock-ride-3',
+      driverId: 'driver-3',
+      driverName: 'Sofía R.',
+      driverRating: 4.8,
+      origin: 'Chapinero',
+      destination: 'Universidad de los Andes',
+      departureTime: DateTime.now().add(const Duration(minutes: 50)),
+      price: 6000,
+      seatsAvailable: 1,
+      status: 'available',
+      zone: 'centro',
+      gender: 'female',
+      punctualityRate: 0.92,
     ),
   ];
 
