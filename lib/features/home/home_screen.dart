@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
+
+import '../../data/models/ride_model.dart';
+import '../../features/auth/auth_viewmodel.dart';
+import '../../features/rides/ride_viewmodel.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _HomeColors {
@@ -18,7 +23,7 @@ abstract final class _HomeColors {
   static const badgeText     = Color(0xFF2E7D32);
 }
 
-// ── Mock data model ──────────────────────────────────────────────────────────
+// ── Display model (for carousel cards) ──────────────────────────────────────
 class _RideData {
   const _RideData({
     required this.name,
@@ -35,6 +40,32 @@ class _RideData {
   final String rating;
   final String seats;
   final String? badge;
+
+  factory _RideData.fromModel(RideModel r) {
+    return _RideData(
+      name: r.driverName,
+      time: _fmtTime(r.departureTime),
+      price: _fmtPrice(r.price),
+      rating: r.driverRating.toStringAsFixed(1),
+      seats: '${r.seatsAvailable} cupos',
+      badge: r.driverRating >= 4.8 ? 'High Reliability' : null,
+    );
+  }
+
+  static String _fmtTime(DateTime dt) {
+    final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final m = dt.minute.toString().padLeft(2, '0');
+    final p = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $p';
+  }
+
+  static String _fmtPrice(double p) {
+    final n = p.toInt();
+    if (n >= 1000) {
+      return '\$${n ~/ 1000}.${(n % 1000).toString().padLeft(3, '0')}';
+    }
+    return '\$$n';
+  }
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -48,34 +79,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showWeatherBanner = true;
 
-  static const _mockRides = [
-    _RideData(
-      name: 'María G.',
-      time: '7:20 AM',
-      price: r'$12.000',
-      rating: '4.9',
-      seats: '2 cupos',
-      badge: 'High Reliability',
-    ),
-    _RideData(
-      name: 'Andrés R.',
-      time: '7:35 AM',
-      price: r'$10.000',
-      rating: '4.6',
-      seats: '1 cupo',
-    ),
-    _RideData(
-      name: 'Camila P.',
-      time: '7:50 AM',
-      price: r'$14.000',
-      rating: '4.9',
-      seats: '3 cupos',
-      badge: 'Female Driver',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    context.read<RideViewModel>().loadAvailableRides();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final rideVm = context.watch<RideViewModel>();
+    final authVm = context.watch<AuthViewModel>();
+
+    final String firstName = authVm.currentUser?.name.split(' ').first ?? 'there';
+    final String initial = authVm.currentUser?.name.isNotEmpty == true
+        ? authVm.currentUser!.name[0].toUpperCase()
+        : '?';
+
+    final List<_RideData> displayRides =
+        rideVm.rides.map(_RideData.fromModel).toList();
+
     return Scaffold(
       backgroundColor: _HomeColors.background,
       floatingActionButton: FloatingActionButton(
@@ -94,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              const _HomeHeader(),
+              _HomeHeader(firstName: firstName, initial: initial),
               const SizedBox(height: 8),
 
               // Weather banner (conditional)
@@ -127,15 +149,45 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                height: 160,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
+
+              if (rideVm.isLoading)
+                const SizedBox(
+                  height: 160,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (rideVm.errorMessage != null)
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _mockRides.length,
-                  itemBuilder: (_, i) => _RideCard(ride: _mockRides[i]),
+                  child: Text(
+                    rideVm.errorMessage!,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: Colors.red,
+                    ),
+                  ),
+                )
+              else if (displayRides.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'No rides available right now.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: _HomeColors.muted,
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 160,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: displayRides.length,
+                    itemBuilder: (_, i) => _RideCard(ride: displayRides[i]),
+                  ),
                 ),
-              ),
+
               const SizedBox(height: 16),
 
               // Recurring rides
@@ -152,7 +204,10 @@ class _HomeScreenState extends State<HomeScreen> {
 // ── Private widgets ──────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  const _HomeHeader({required this.firstName, required this.initial});
+
+  final String firstName;
+  final String initial;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +219,7 @@ class _HomeHeader extends StatelessWidget {
             radius: 20,
             backgroundColor: _HomeColors.primary,
             child: Text(
-              'F',
+              initial,
               style: GoogleFonts.poppins(
                 color: _HomeColors.background,
                 fontWeight: FontWeight.w700,
@@ -186,7 +241,7 @@ class _HomeHeader extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Felipe',
+                  firstName,
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,

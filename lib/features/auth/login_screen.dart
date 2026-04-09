@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+
+import 'auth_viewmodel.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _LoginColors {
@@ -28,21 +31,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const _errorColor = Color(0xFFFF3B30);
 
-  void _login() {
+  Future<void> _login() async {
     final email = _emailController.text.trim();
-    if (!email.endsWith('@uniandes.edu.co')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Debes usar tu correo institucional @uniandes.edu.co',
-            style: GoogleFonts.poppins(color: _LoginColors.background),
-          ),
-          backgroundColor: _errorColor,
-        ),
-      );
-      return;
+    final password = _passwordController.text;
+
+    final authViewModel = context.read<AuthViewModel>();
+    final success = await authViewModel.signIn(email, password);
+
+    if (success && mounted) {
+      context.go('/home');
     }
-    context.go('/home');
   }
 
   @override
@@ -54,6 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authViewModel = context.watch<AuthViewModel>();
+
     return Scaffold(
       backgroundColor: _LoginColors.background,
       resizeToAvoidBottomInset: true,
@@ -93,23 +93,39 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 32),
 
-              ElevatedButton(
-                onPressed: _login,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _LoginColors.primary,
-                  foregroundColor: _LoginColors.background,
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                  textStyle: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+              authViewModel.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ElevatedButton(
+                      onPressed: _login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _LoginColors.primary,
+                        foregroundColor: _LoginColors.background,
+                        minimumSize: const Size(double.infinity, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                        textStyle: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      child: const Text('Iniciar Sesión'),
+                    ),
+
+              if (authViewModel.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    authViewModel.errorMessage!,
+                    style: const TextStyle(
+                      color: _errorColor,
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-                child: const Text('Iniciar Sesión'),
-              ),
+
               const SizedBox(height: 16),
 
               Row(

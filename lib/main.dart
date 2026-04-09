@@ -1,9 +1,33 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:uniride/core/routes.dart';
-import 'package:uniride/core/theme.dart';
+import 'package:provider/provider.dart';
 
-void main() {
-  runApp(const UniRideApp());
+import 'core/firebase_options.dart';
+import 'core/routes.dart';
+import 'core/theme.dart';
+import 'data/repositories/impl/firebase_auth_repository.dart';
+import 'data/repositories/impl/firebase_ride_repository.dart';
+import 'features/auth/auth_viewmodel.dart';
+import 'features/rides/ride_viewmodel.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => RideViewModel(FirebaseRideRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => AuthViewModel(FirebaseAuthRepository()),
+        ),
+      ],
+      child: const UniRideApp(),
+    ),
+  );
 }
 
 class UniRideApp extends StatelessWidget {
