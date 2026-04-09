@@ -11,14 +11,28 @@ class FirebaseRideRepository implements RideRepository {
 
   @override
   Future<List<RideModel>> getAvailableRides() async {
-    final snapshot = await _firestore
-        .collection('rides')
-        .where('status', isEqualTo: 'available')
-        .get();
+    try {
+      final snapshot = await _firestore
+          .collection('rides')
+          .where('status', isEqualTo: 'available')
+          .get();
 
-    return snapshot.docs
-        .map((doc) => RideModel.fromMap(doc.data(), doc.id))
-        .toList();
+      return snapshot.docs.map((doc) {
+        try {
+          return RideModel.fromMap(doc.data(), doc.id);
+        } catch (e) {
+          // ignore: avoid_print
+          print('ERROR mapping doc ${doc.id}: $e');
+          // ignore: avoid_print
+          print('Doc data: ${doc.data()}');
+          rethrow;
+        }
+      }).toList();
+    } catch (e) {
+      // ignore: avoid_print
+      print('ERROR in getAvailableRides: $e');
+      rethrow;
+    }
   }
 
   @override
@@ -81,7 +95,7 @@ class FirebaseRideRepository implements RideRepository {
         throw Exception('Ride not found.');
       }
 
-      final seats = snapshot.data()!['seatsAvailable'] as int? ?? 0;
+      final seats = (snapshot.data()!['seatsAvailable'] as num?)?.toInt() ?? 0;
       if (seats <= 0) {
         throw Exception('No seats available.');
       }

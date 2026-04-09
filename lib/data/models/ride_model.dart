@@ -12,6 +12,8 @@ class RideModel {
   final int seatsAvailable;
   final String status;
   final String zone;
+  final String gender;
+  final double punctualityRate;
   bool hasRainForecast;
 
   RideModel({
@@ -26,20 +28,12 @@ class RideModel {
     required this.seatsAvailable,
     required this.status,
     required this.zone,
+    this.gender = 'male',
+    this.punctualityRate = 0.0,
     this.hasRainForecast = false,
   });
 
   factory RideModel.fromMap(Map<String, dynamic> data, String id) {
-    DateTime departureTime;
-    final rawTime = data['departureTime'];
-    if (rawTime is Timestamp) {
-      departureTime = rawTime.toDate();
-    } else if (rawTime is String) {
-      departureTime = DateTime.tryParse(rawTime) ?? DateTime.now();
-    } else {
-      departureTime = DateTime.now();
-    }
-
     return RideModel(
       id: id,
       driverId: data['driverId'] as String? ?? '',
@@ -47,11 +41,14 @@ class RideModel {
       driverRating: (data['driverRating'] as num?)?.toDouble() ?? 0.0,
       origin: data['origin'] as String? ?? '',
       destination: data['destination'] as String? ?? '',
-      departureTime: departureTime,
+      departureTime:
+          (data['departureTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
-      seatsAvailable: data['seatsAvailable'] as int? ?? 0,
+      seatsAvailable: (data['seatsAvailable'] as num?)?.toInt() ?? 0,
       status: data['status'] as String? ?? 'available',
       zone: data['zone'] as String? ?? '',
+      gender: data['gender'] as String? ?? 'male',
+      punctualityRate: (data['punctualityRate'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -67,6 +64,8 @@ class RideModel {
     int? seatsAvailable,
     String? status,
     String? zone,
+    String? gender,
+    double? punctualityRate,
     bool? hasRainForecast,
   }) {
     return RideModel(
@@ -81,6 +80,8 @@ class RideModel {
       seatsAvailable: seatsAvailable ?? this.seatsAvailable,
       status: status ?? this.status,
       zone: zone ?? this.zone,
+      gender: gender ?? this.gender,
+      punctualityRate: punctualityRate ?? this.punctualityRate,
       hasRainForecast: hasRainForecast ?? this.hasRainForecast,
     );
   }
