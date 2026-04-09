@@ -52,6 +52,10 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String?> getCurrentUserId() {
+    return _repository.getCurrentUserId();
+  }
+
   Future<int> getQueuePosition(String userId, String rideId) {
     return _repository.getQueuePosition(userId, rideId);
   }
