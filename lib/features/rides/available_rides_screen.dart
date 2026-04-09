@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 import '../../data/models/ride_model.dart';
-import '../../features/rides/ride_viewmodel.dart';
+import '../../shared/widgets/bottom_nav_bar.dart';
+import 'ride_viewmodel.dart';
 
-// ── Local colour palette ──────────────────────────────────────────────────────
 abstract final class _RidesColors {
   static const primary = Color(0xFF1F5DFF);
   static const background = Color(0xFFFFFFFF);
@@ -26,28 +25,6 @@ abstract final class _RidesColors {
   static const warningAmber = Color(0xFFF59E0B);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-String _fmtTime(DateTime dt) {
-  final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-  final m = dt.minute.toString().padLeft(2, '0');
-  final p = dt.hour >= 12 ? 'PM' : 'AM';
-  return '$h:$m $p';
-}
-
-String _fmtPrice(double p) {
-  final n = p.toInt();
-  if (n >= 1000) {
-    return '\$${n ~/ 1000}.${(n % 1000).toString().padLeft(3, '0')}';
-  }
-  return '\$$n';
-}
-
-String? _badge(RideModel r) {
-  if (r.driverRating >= 4.8) return 'HIGH RELIABILITY';
-  return null;
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────────
 class AvailableRidesScreen extends StatefulWidget {
   const AvailableRidesScreen({super.key});
 
@@ -59,30 +36,31 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   String _selectedDeparture = 'Now';
   String _activeFilter = 'High Reliability';
 
+  static const List<String> _departureOptions = <String>[
+    'Now',
+    '7:00 AM',
+    '7:30 AM',
+    '8:00 AM',
+    '8:30 AM',
+  ];
+
+  static const List<String> _filters = <String>[
+    'High Reliability',
+    'Female Driver',
+    '4.5+ Rating',
+  ];
+
   @override
   void initState() {
     super.initState();
-    context.read<RideViewModel>().loadAvailableRides();
-  }
-
-  List<RideModel> _applyFilter(List<RideModel> rides) {
-    switch (_activeFilter) {
-      case 'High Reliability':
-        return rides.where((r) => r.driverRating >= 4.8).toList();
-      case '4.5+ Rating':
-        return rides.where((r) => r.driverRating >= 4.5).toList();
-      case 'Female Driver':
-        return rides; // no gender field in Firestore yet
-      default:
-        return rides;
-    }
+    Future.microtask(() {
+      if (!mounted) return;
+      context.read<RideViewModel>().loadAvailableRides();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final vm = context.watch<RideViewModel>();
-    final filtered = _applyFilter(vm.rides);
-
     return Scaffold(
       backgroundColor: _RidesColors.background,
       appBar: AppBar(
@@ -108,7 +86,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
               ),
             ),
             Text(
-              'Chapinero → Campus',
+              'Find your next trip',
               style: GoogleFonts.poppins(
                 fontSize: 12,
                 color: _RidesColors.muted,
@@ -118,80 +96,193 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.tune, color: _RidesColors.textPrimary),
-            onPressed: () {},
+            icon: const Icon(Icons.refresh, color: _RidesColors.textPrimary),
+            onPressed: () => context.read<RideViewModel>().loadAvailableRides(),
           ),
         ],
       ),
       bottomNavigationBar: const UniRideBottomNav(currentIndex: 1),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSearchSummaryCard(),
-              _FilterChipsRow(
-                activeFilter: _activeFilter,
-                onFilterChanged: (val) => setState(() => _activeFilter = val),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Text(
-                  'RECOMMENDED RIDES',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _RidesColors.muted,
-                    letterSpacing: 0.8,
+        child: Consumer<RideViewModel>(
+          builder: (context, vm, _) {
+            final filteredRides = _applyFilters(vm.rides);
+
+            return RefreshIndicator(
+              onRefresh: vm.loadAvailableRides,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  _SearchSummaryCard(
+                    selectedDeparture: _selectedDeparture,
+                    departureOptions: _departureOptions,
+                    onDepartureChanged: (value) {
+                      setState(() => _selectedDeparture = value);
+                    },
+                    onSearchPressed: () {
+                      setState(() {});
+                    },
                   ),
-                ),
-              ),
-              if (vm.isLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 48),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (vm.errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    vm.errorMessage!,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: Colors.red,
+                  _FilterChipsRow(
+                    filters: _filters,
+                    activeFilter: _activeFilter,
+                    onFilterChanged: (value) {
+                      setState(() => _activeFilter = value);
+                    },
+                  ),
+                  if (_activeFilter == 'Female Driver')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _RidesColors.purpleLight,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Este filtro queda pendiente hasta agregar '
+                          '`isFemaleDriver` al modelo de lista.',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: _RidesColors.purpleText,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'RECOMMENDED RIDES',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _RidesColors.muted,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${filteredRides.length} results',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: _RidesColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                )
-              else if (filtered.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'No rides match this filter.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: _RidesColors.muted,
+                  if (vm.isLoading && vm.rides.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 48),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (vm.errorMessage != null && vm.rides.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _ErrorCard(
+                        message: vm.errorMessage!,
+                        onRetry: vm.loadAvailableRides,
+                      ),
+                    )
+                  else if (filteredRides.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: _EmptyStateCard(),
+                    )
+                  else
+                    ...filteredRides.map(
+                      (ride) => _RideCard(
+                        ride: ride,
+                        onTap: () => context.go('/rides/${ride.id}'),
+                      ),
                     ),
-                  ),
-                )
-              else
-                ListView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) => _RideCard(ride: filtered[i]),
-                ),
-              const SizedBox(height: 16),
-            ],
-          ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildSearchSummaryCard() {
+  List<RideModel> _applyFilters(List<RideModel> rides) {
+    final departureFiltered = rides.where(_matchesDeparture).toList();
+
+    switch (_activeFilter) {
+      case 'High Reliability':
+        return departureFiltered
+            .where((ride) => ride.driverRating >= 4.8)
+            .toList();
+
+      case '4.5+ Rating':
+        return departureFiltered
+            .where((ride) => ride.driverRating >= 4.5)
+            .toList();
+
+      case 'Female Driver':
+        return departureFiltered;
+
+      default:
+        return departureFiltered;
+    }
+  }
+
+  bool _matchesDeparture(RideModel ride) {
+    if (_selectedDeparture == 'Now') return true;
+
+    final target = _parseTimeLabel(_selectedDeparture);
+    if (target == null) return true;
+
+    final rideMinutes = ride.departureTime.hour * 60 + ride.departureTime.minute;
+    final targetMinutes = target.hour * 60 + target.minute;
+
+    return rideMinutes >= targetMinutes;
+  }
+
+  TimeOfDay? _parseTimeLabel(String label) {
+    if (label == 'Now') return null;
+
+    final parts = label.split(' ');
+    if (parts.length != 2) return null;
+
+    final hm = parts[0].split(':');
+    if (hm.length != 2) return null;
+
+    final rawHour = int.tryParse(hm[0]);
+    final minute = int.tryParse(hm[1]);
+    if (rawHour == null || minute == null) return null;
+
+    final suffix = parts[1].toUpperCase();
+    int hour = rawHour;
+
+    if (suffix == 'PM' && hour != 12) hour += 12;
+    if (suffix == 'AM' && hour == 12) hour = 0;
+
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+}
+
+class _SearchSummaryCard extends StatelessWidget {
+  const _SearchSummaryCard({
+    required this.selectedDeparture,
+    required this.departureOptions,
+    required this.onDepartureChanged,
+    required this.onSearchPressed,
+  });
+
+  final String selectedDeparture;
+  final List<String> departureOptions;
+  final ValueChanged<String> onDepartureChanged;
+  final VoidCallback onSearchPressed;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -230,7 +321,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Chapinero',
+                            'Any origin',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -268,7 +359,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Campus',
+                            'Any destination',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -303,7 +394,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
               Expanded(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedDeparture,
+                    value: selectedDeparture,
                     isDense: true,
                     isExpanded: true,
                     style: GoogleFonts.poppins(
@@ -316,11 +407,17 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                       size: 16,
                       color: _RidesColors.muted,
                     ),
-                    items: ['Now', '7:00 AM', '7:30 AM', '8:00 AM', '8:30 AM']
-                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    items: departureOptions
+                        .map(
+                          (value) => DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          ),
+                        )
                         .toList(),
-                    onChanged: (val) =>
-                        setState(() => _selectedDeparture = val!),
+                    onChanged: (value) {
+                      if (value != null) onDepartureChanged(value);
+                    },
                   ),
                 ),
               ),
@@ -329,7 +426,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                 width: 80,
                 height: 36,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: onSearchPressed,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _RidesColors.primary,
                     padding: EdgeInsets.zero,
@@ -338,7 +435,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
                     ),
                   ),
                   child: Text(
-                    'Search',
+                    'Apply',
                     style: GoogleFonts.poppins(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -355,18 +452,16 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   }
 }
 
-// ── Private widgets ───────────────────────────────────────────────────────────
-
 class _FilterChipsRow extends StatelessWidget {
   const _FilterChipsRow({
+    required this.filters,
     required this.activeFilter,
     required this.onFilterChanged,
   });
 
+  final List<String> filters;
   final String activeFilter;
   final ValueChanged<String> onFilterChanged;
-
-  static const _filters = ['High Reliability', 'Female Driver', '4.5+ Rating'];
 
   @override
   Widget build(BuildContext context) {
@@ -375,7 +470,7 @@ class _FilterChipsRow extends StatelessWidget {
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: _filters
+        children: filters
             .map(
               (label) => _FilterChip(
                 label: label,
@@ -428,30 +523,21 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _RideCard extends StatelessWidget {
-  const _RideCard({required this.ride});
+  const _RideCard({
+    required this.ride,
+    required this.onTap,
+  });
 
   final RideModel ride;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final String? badge = _badge(ride);
-    final String timeStr = _fmtTime(ride.departureTime);
-    final String priceStr = _fmtPrice(ride.price);
+    final badge = _buildBadge(ride);
 
-    return GestureDetector(
-      onTap: () => context.push('/rides/details', extra: {
-        'name': ride.driverName,
-        'initial': ride.driverName.isNotEmpty ? ride.driverName[0] : '?',
-        'rating': ride.driverRating,
-        'from': ride.origin,
-        'to': ride.destination,
-        'time': timeStr,
-        'eta': '--',
-        'price': priceStr,
-        'seats': ride.seatsAvailable,
-        'badge': badge,
-        'isFemaleDriver': false,
-      }),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         padding: const EdgeInsets.all(16),
@@ -470,14 +556,13 @@ class _RideCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ROW 1 — driver info + badge
             Row(
               children: [
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: _RidesColors.primary,
                   child: Text(
-                    ride.driverName.isNotEmpty ? ride.driverName[0] : '?',
+                    _initialFromName(ride.driverName),
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -489,7 +574,6 @@ class _RideCard extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         ride.driverName,
@@ -523,15 +607,12 @@ class _RideCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-
-            // ROW 2 — route + time
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
@@ -544,11 +625,14 @@ class _RideCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            ride.origin,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: _RidesColors.textSecondary,
+                          Expanded(
+                            child: Text(
+                              ride.origin,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: _RidesColors.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -567,11 +651,14 @@ class _RideCard extends StatelessWidget {
                             color: _RidesColors.muted,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            ride.destination,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              color: _RidesColors.textSecondary,
+                          Expanded(
+                            child: Text(
+                              ride.destination,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: _RidesColors.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -581,10 +668,9 @@ class _RideCard extends StatelessWidget {
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      timeStr,
+                      _formatTime(ride.departureTime),
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -592,7 +678,7 @@ class _RideCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'ETA --',
+                      ride.zone.isEmpty ? ride.status : ride.zone,
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         color: _RidesColors.muted,
@@ -605,18 +691,15 @@ class _RideCard extends StatelessWidget {
             const SizedBox(height: 12),
             const Divider(color: _RidesColors.border, height: 1),
             const SizedBox(height: 12),
-
-            // ROW 3 — price + seats + reserve button
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        priceStr,
+                        _formatPrice(ride.price),
                         style: GoogleFonts.poppins(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -644,23 +727,10 @@ class _RideCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: 100,
+                  width: 112,
                   height: 40,
                   child: ElevatedButton(
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Ride reserved with ${ride.driverName}!',
-                          style: GoogleFonts.poppins(color: Colors.white),
-                        ),
-                        backgroundColor: _RidesColors.primary,
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
+                    onPressed: onTap,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _RidesColors.primary,
                       foregroundColor: Colors.white,
@@ -671,7 +741,7 @@ class _RideCard extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      'Reserve',
+                      'See details',
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -687,6 +757,41 @@ class _RideCard extends StatelessWidget {
       ),
     );
   }
+
+  static String _initialFromName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '?';
+    return trimmed.characters.first.toUpperCase();
+  }
+
+  static String _formatTime(DateTime value) {
+    final hour24 = value.hour;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    int hour12 = hour24 % 12;
+    if (hour12 == 0) hour12 = 12;
+    return '$hour12:$minute $period';
+  }
+
+  static String _formatPrice(double value) {
+    final whole = value.round();
+    final text = whole.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      final reverseIndex = text.length - i;
+      buffer.write(text[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+        buffer.write('.');
+      }
+    }
+    return '\$$buffer';
+  }
+
+  static String? _buildBadge(RideModel ride) {
+    if (ride.driverRating >= 4.8) return 'HIGH RELIABILITY';
+    if (ride.hasRainForecast) return 'RAIN FORECAST';
+    return null;
+  }
 }
 
 class _DriverBadge extends StatelessWidget {
@@ -696,7 +801,8 @@ class _DriverBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isReliability = badge == 'HIGH RELIABILITY';
+    final isReliability = badge == 'HIGH RELIABILITY';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -715,6 +821,94 @@ class _DriverBadge extends StatelessWidget {
               ? _RidesColors.successText
               : _RidesColors.purpleText,
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade100),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.redAccent, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: _RidesColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: onRetry,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _RidesColors.primary,
+            ),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyStateCard extends StatelessWidget {
+  const _EmptyStateCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _RidesColors.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _RidesColors.border),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.directions_car_outlined,
+            size: 40,
+            color: _RidesColors.muted,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'No rides available with the current filters.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: _RidesColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Try another departure time or remove one of the filters.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: _RidesColors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }

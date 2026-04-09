@@ -1,9 +1,12 @@
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:uniride/data/repositories/impl/firebase_ride_repository.dart';
 import 'package:uniride/features/auth/login_screen.dart';
 import 'package:uniride/features/home/home_screen.dart';
 import 'package:uniride/features/nfc/nfc_access_screen.dart';
 import 'package:uniride/features/rides/available_rides_screen.dart';
 import 'package:uniride/features/rides/ride_details_screen.dart';
+import 'package:uniride/features/rides/ride_details_viewmodel.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -21,11 +24,13 @@ final appRouter = GoRouter(
       builder: (context, state) => const AvailableRidesScreen(),
     ),
     GoRoute(
-      path: '/rides/details',
+      path: '/rides/:rideId',
       builder: (context, state) {
-        final ride = state.extra as Map<String, dynamic>? ??
-            RideDetailsScreen.fallbackRide();
-        return RideDetailsScreen(ride: ride);
+        final rideId = state.pathParameters['rideId']!;
+        return ChangeNotifierProvider(
+          create: (_) => RideDetailsViewModel(FirebaseRideRepository())..load(rideId),
+          child: RideDetailsScreen(rideId: rideId),
+        );
       },
     ),
     GoRoute(
