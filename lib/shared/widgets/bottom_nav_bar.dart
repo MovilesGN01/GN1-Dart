@@ -29,8 +29,9 @@ class UniRideBottomNav extends StatelessWidget {
       onTap: (index) {
         if (index == 0) context.go('/home');
         if (index == 1) context.go('/rides');
-        // index 2, 3: no navigation yet
-      },
+        if (index == 3) context.go('/nfc');
+        // index 2: no navigation yet
+  },
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.home_outlined),
