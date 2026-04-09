@@ -27,8 +27,8 @@ class NfcService {
     try {
       return NfcScanResult(
         id: tag.id,
-        type: tag.type.name,
-        standard: tag.standard ?? 'unknown',
+        type: tag.type.toString(),
+        standard: tag.standard.toString(),
       );
     } finally {
       await FlutterNfcKit.finish();
