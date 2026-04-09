@@ -71,4 +71,37 @@ class FirebaseAuthRepository implements UserRepository {
 
     return snapshot.docs.length + 1;
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecurringRoutes(String userId) async {
+    final snapshot = await _firestore
+        .collection('rideHistory')
+        .where('passengerId', isEqualTo: userId)
+        .get();
+
+    final Map<String, Map<String, dynamic>> grouped = {};
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final origin = data['origin'] as String? ?? '';
+      final destination =
+          data['destination'] as String? ?? 'Campus Uniandes';
+      if (origin.isEmpty) continue;
+      if (grouped.containsKey(origin)) {
+        grouped[origin]!['count'] =
+            (grouped[origin]!['count'] as int) + 1;
+      } else {
+        grouped[origin] = {
+          'origin': origin,
+          'destination': destination,
+          'count': 1,
+        };
+      }
+    }
+
+    final sorted = grouped.values.toList()
+      ..sort((a, b) =>
+          (b['count'] as int).compareTo(a['count'] as int));
+
+    return sorted.take(2).toList();
+  }
 }

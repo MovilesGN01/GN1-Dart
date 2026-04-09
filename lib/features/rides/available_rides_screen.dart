@@ -77,6 +77,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   String _activeFilter = 'All';
   List<RideModel> _filteredRides = [];
   bool _hasSearched = false;
+  bool _pendingAutoSearch = false;
 
   static const _departureOptions = ['Now', 'In 30 min', 'In 1 hour', 'In 2 hours'];
 
@@ -88,6 +89,14 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     _fromController.addListener(_onFromChanged);
     _toController.addListener(_onToChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Pre-fill FROM/TO from query parameters passed by home screen
+      final params = GoRouterState.of(context).uri.queryParameters;
+      final from = params['from'] ?? '';
+      final to = params['to'] ?? '';
+      if (from.isNotEmpty) _fromController.text = from;
+      if (to.isNotEmpty) _toController.text = to;
+      if (from.isNotEmpty && to.isNotEmpty) _pendingAutoSearch = true;
+
       _tryAutoFillLocation();
       context.read<RideViewModel>().loadAvailableRides();
       _locationServiceStream = Geolocator.getServiceStatusStream().listen(
@@ -138,6 +147,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
 
   // Feature 2 — GPS auto-fill FROM field
   Future<void> _tryAutoFillLocation() async {
+    if (_fromController.text.isNotEmpty) return; // already filled, skip GPS
     final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) setState(() => _locationServiceDisabled = true);
@@ -233,6 +243,14 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<RideViewModel>();
+
+    // Auto-search once rides finish loading (when navigated from Home)
+    if (_pendingAutoSearch && !vm.isLoading && vm.rides.isNotEmpty) {
+      _pendingAutoSearch = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onSearch();
+      });
+    }
 
     final sourceList = _hasSearched ? _filteredRides : vm.rides;
     List<RideModel> displayed = _applyChipFilter(sourceList);

@@ -13,4 +13,7 @@ abstract class UserRepository {
 
   /// Returns 1-based position in the ride's queue for the given user.
   Future<int> getQueuePosition(String userId, String rideId);
+
+  /// Returns top 2 routes sorted by frequency from rideHistory.
+  Future<List<Map<String, dynamic>>> getRecurringRoutes(String userId);
 }
