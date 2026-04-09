@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:uniride/data/models/ride_model.dart';
+import 'package:uniride/presentation/viewmodels/ride_viewmodel.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
@@ -18,23 +21,26 @@ abstract final class _HomeColors {
   static const badgeText     = Color(0xFF2E7D32);
 }
 
-// ── Mock data model ──────────────────────────────────────────────────────────
-class _RideData {
-  const _RideData({
-    required this.name,
-    required this.time,
-    required this.price,
-    required this.rating,
-    required this.seats,
-    this.badge,
-  });
+// ── Display helpers ───────────────────────────────────────────────────────────
+String _formatDepartureTime(DateTime dt) {
+  final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+  final minute = dt.minute.toString().padLeft(2, '0');
+  final period = dt.hour < 12 ? 'AM' : 'PM';
+  return '$hour:$minute $period';
+}
 
-  final String name;
-  final String time;
-  final String price;
-  final String rating;
-  final String seats;
-  final String? badge;
+String _formatPrice(double price) {
+  return '\$${(price / 1000).toStringAsFixed(0)}.000';
+}
+
+String _formatSeats(int seats) {
+  return '$seats cupo${seats == 1 ? '' : 's'}';
+}
+
+String? _getBadge(RideModel ride) {
+  if (ride.isFemaleDriver) return 'Female Driver';
+  if (ride.reputationScore >= 4.8) return 'High Reliability';
+  return null;
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -48,34 +54,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showWeatherBanner = true;
 
-  static const _mockRides = [
-    _RideData(
-      name: 'María G.',
-      time: '7:20 AM',
-      price: r'$12.000',
-      rating: '4.9',
-      seats: '2 cupos',
-      badge: 'High Reliability',
-    ),
-    _RideData(
-      name: 'Andrés R.',
-      time: '7:35 AM',
-      price: r'$10.000',
-      rating: '4.6',
-      seats: '1 cupo',
-    ),
-    _RideData(
-      name: 'Camila P.',
-      time: '7:50 AM',
-      price: r'$14.000',
-      rating: '4.9',
-      seats: '3 cupos',
-      badge: 'Female Driver',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final vm = context.read<RideViewModel>();
+      if (vm.rides.isEmpty && !vm.isLoading) {
+        vm.loadRides();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final rideVm = context.watch<RideViewModel>();
+
     return Scaffold(
       backgroundColor: _HomeColors.background,
       floatingActionButton: FloatingActionButton(
@@ -129,12 +122,20 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               SizedBox(
                 height: 160,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _mockRides.length,
-                  itemBuilder: (_, i) => _RideCard(ride: _mockRides[i]),
-                ),
+                child: rideVm.isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: _HomeColors.primary,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: rideVm.rides.take(3).length,
+                        itemBuilder: (_, i) =>
+                            _RideCard(ride: rideVm.rides[i]),
+                      ),
               ),
               const SizedBox(height: 16),
 
@@ -477,10 +478,12 @@ class _SearchField extends StatelessWidget {
 class _RideCard extends StatelessWidget {
   const _RideCard({required this.ride});
 
-  final _RideData ride;
+  final RideModel ride;
 
   @override
   Widget build(BuildContext context) {
+    final badge = _getBadge(ride);
+
     return Container(
       width: 160,
       margin: const EdgeInsets.only(right: 12),
@@ -499,7 +502,7 @@ class _RideCard extends StatelessWidget {
                 radius: 16,
                 backgroundColor: _HomeColors.primary,
                 child: Text(
-                  ride.name[0],
+                  ride.driverName[0],
                   style: GoogleFonts.poppins(
                     color: _HomeColors.background,
                     fontSize: 12,
@@ -510,7 +513,7 @@ class _RideCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  ride.name,
+                  ride.driverName,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -523,7 +526,7 @@ class _RideCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            ride.time,
+            _formatDepartureTime(ride.departureTime),
             style: GoogleFonts.poppins(
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -531,7 +534,7 @@ class _RideCard extends StatelessWidget {
             ),
           ),
           Text(
-            ride.price,
+            _formatPrice(ride.price),
             style: GoogleFonts.poppins(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -539,13 +542,13 @@ class _RideCard extends StatelessWidget {
             ),
           ),
           Text(
-            ride.seats,
+            _formatSeats(ride.seatsAvailable),
             style: GoogleFonts.poppins(
               fontSize: 11,
               color: _HomeColors.muted,
             ),
           ),
-          if (ride.badge != null) ...[
+          if (badge != null) ...[
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -554,7 +557,7 @@ class _RideCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                ride.badge!,
+                badge,
                 style: GoogleFonts.poppins(
                   fontSize: 10,
                   color: _HomeColors.badgeText,
