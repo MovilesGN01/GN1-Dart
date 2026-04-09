@@ -1,65 +1,35 @@
-// MockImplementation — to be replaced with FirebaseRideRepository in next iteration
-import 'package:uniride/data/models/ride_details_model.dart';
+import '../../models/ride_details_model.dart';
+@override
+Future<RideDetailsModel> getRideDetails(String rideId) async {
+  return RideDetailsModel(
+    id: rideId,
+    driverId: 'mock-driver',
+    driverName: 'Maria G.',
+    driverRating: 4.8,
+    driverPhotoUrl: '',
+    origin: 'Chapinero',
+    destination: 'Campus',
+    departureTime: DateTime.now().add(const Duration(minutes: 20)),
+    estimatedDurationMinutes: 18,
+    price: 12000,
+    seatsAvailable: 2,
+    status: 'available',
+    zone: 'Chapinero',
+    pickupAddress: 'Cra. 13 #57-39',
+    pickupReference: 'Frente a la portería',
+    vehicleBrand: 'Mazda',
+    vehicleModel: '2',
+    vehicleColor: 'Gris plata',
+    vehiclePlate: 'KQW219',
+    amenities: ['AC', 'No smoking'],
+    badges: ['HIGH RELIABILITY'],
+    notes: 'Salgo puntual.',
+    isFemaleDriver: false,
+    isReservedByCurrentUser: false,
+  );
+}
 
-import '../ride_repository.dart';
-import '../../models/ride_model.dart';
-
-class MockRideRepository implements RideRepository {
-  final List<RideModel> _rides = [
-    RideModel(
-      id: 'mock-ride-1',
-      driverId: 'driver-1',
-      driverName: 'Carlos M.',
-      driverRating: 4.9,
-      origin: 'Chía',
-      destination: 'Universidad de los Andes',
-      departureTime: DateTime.now().add(const Duration(minutes: 20)),
-      price: 8500,
-      seatsAvailable: 3,
-      status: 'available',
-      zone: 'norte',
-    ),
-    RideModel(
-      id: 'mock-ride-2',
-      driverId: 'driver-2',
-      driverName: 'Laura G.',
-      driverRating: 4.7,
-      origin: 'Usaquén',
-      destination: 'Universidad de los Andes',
-      departureTime: DateTime.now().add(const Duration(minutes: 35)),
-      price: 7000,
-      seatsAvailable: 2,
-      status: 'available',
-      zone: 'norte',
-    ),
-  ];
-
-  @override
-  Future<List<RideModel>> getAvailableRides() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return List.from(_rides);
-  }
-
-  @override
-  Future<List<RideModel>> getMatchingRides(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return List.from(_rides);
-  }
-
-  @override
-  Future<void> reserveRide(String rideId, String userId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    final index = _rides.indexWhere((r) => r.id == rideId);
-    if (index != -1 && _rides[index].seatsAvailable > 0) {
-      _rides[index] = _rides[index].copyWith(
-        seatsAvailable: _rides[index].seatsAvailable - 1,
-      );
-    }
-  }
-
-  @override
-  Future<RideDetailsModel> getRideDetails(String rideId) {
-    // TODO: implement getRideDetails
-    throw UnimplementedError();
-  }
+@override
+Future<void> reserveRide(String rideId) async {
+  await Future.delayed(const Duration(milliseconds: 500));
 }
