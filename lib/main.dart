@@ -30,6 +30,10 @@ void main() async {
   );
 }
 
+class DefaultFirebaseOptions {
+  static FirebaseOptions? get currentPlatform => null;
+}
+
 class UniRideApp extends StatelessWidget {
   const UniRideApp({super.key});
 

@@ -30,6 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+    cloud_functions: ^4.0.0
 
   google_fonts: ^6.1.0      # Poppins
   go_router: ^13.0.0        # Navigation
