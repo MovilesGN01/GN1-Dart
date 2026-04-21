@@ -9,10 +9,7 @@ abstract final class _NavColors {
 }
 
 class UniRideBottomNav extends StatelessWidget {
-  const UniRideBottomNav({
-    super.key,
-    required this.currentIndex,
-  });
+  const UniRideBottomNav({super.key, required this.currentIndex});
 
   final int currentIndex;
 
@@ -28,9 +25,7 @@ class UniRideBottomNav extends StatelessWidget {
         fontSize: 11,
         fontWeight: FontWeight.w600,
       ),
-      unselectedLabelStyle: GoogleFonts.poppins(
-        fontSize: 11,
-      ),
+      unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11),
       onTap: (index) {
         if (index == 0) context.go('/home');
         if (index == 1) context.go('/rides');
