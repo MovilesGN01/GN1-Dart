@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'nfc_service.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
+import 'nfc_verification_service.dart';
+import 'package:uniride/features/nfc/nfc_verification_service.dart';
 
 enum _NfcStatus {
   ready,
@@ -21,7 +23,8 @@ class NfcAccessScreen extends StatefulWidget {
 
 class _NfcAccessScreenState extends State<NfcAccessScreen> {
   final NfcService _service = NfcService();
-
+  final NfcVerificationService _verificationService = NfcVerificationService();
+  
   // Reemplaza estos IDs por tags reales o muévelos a backend / Firestore.
   final Set<String> _allowedTagIds = {
     '04AABBCCDD11',
@@ -32,30 +35,32 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
   String _statusMessage = 'Acerca tu carné o tu celular para validar acceso.';
   NfcScanResult? _lastScan;
 
-  Future<void> _startScan() async {
+Future<void> _startScan() async {
+  setState(() {
+    _status = _NfcStatus.scanning;
+    _statusMessage = 'Escaneando... acerca el tag al dispositivo.';
+  });
+
+  try {
+    final result = await _service.scan();
+
+    final isAuthorized =
+        await _verificationService.verifyTag(result.id.toUpperCase());
+
     setState(() {
-      _status = _NfcStatus.scanning;
-      _statusMessage = 'Escaneando... acerca el tag al dispositivo.';
+      _lastScan = result;
+      _status = isAuthorized ? _NfcStatus.authorized : _NfcStatus.rejected;
+      _statusMessage = isAuthorized
+          ? 'Acceso validado. Puedes abordar o ingresar al punto de encuentro.'
+          : 'Tag no autorizado para este acceso.';
     });
-
-    try {
-      final result = await _service.scan();
-      final isAuthorized = _allowedTagIds.contains(result.id.toUpperCase());
-
-      setState(() {
-        _lastScan = result;
-        _status = isAuthorized ? _NfcStatus.authorized : _NfcStatus.rejected;
-        _statusMessage = isAuthorized
-            ? 'Acceso validado. Puedes abordar o ingresar al punto de encuentro.'
-            : 'Tag no autorizado para este acceso.';
-      });
-    } catch (e) {
-      setState(() {
-        _status = _NfcStatus.error;
-        _statusMessage = e.toString().replaceFirst('Exception: ', '');
-      });
-    }
+  } catch (e) {
+    setState(() {
+      _status = _NfcStatus.error;
+      _statusMessage = e.toString().replaceFirst('Exception: ', '');
+    });
   }
+}
 
   void _reset() {
     setState(() {
