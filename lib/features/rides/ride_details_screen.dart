@@ -273,23 +273,49 @@ class RideDetailsScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _InfoRow(
-                        label: 'Address',
-                        value: ride.pickupAddress.isEmpty
-                            ? 'Not specified'
-                            : ride.pickupAddress,
-                      ),
-                      _InfoRow(
-                        label: 'Reference',
-                        value: ride.pickupReference.isEmpty
-                            ? 'Not specified'
-                            : ride.pickupReference,
-                        isLast: true,
-                      ),
+                      if (ride.meetingPoints.isNotEmpty) ...[
+                        Text(
+                          'Select one of the available pickup points:',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: const Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...ride.meetingPoints.map(
+                          (point) => RadioListTile<String>(
+                            value: point,
+                            groupValue: ride.selectedMeetingPoint,
+                            onChanged: (value) {
+                              if (value != null) {
+                                context.read<RideDetailsViewModel>().selectMeetingPoint(value);
+                              }
+                            },
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              point,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        _InfoRow(
+                          label: 'Address',
+                          value: ride.pickupAddress.isEmpty ? 'Not specified' : ride.pickupAddress,
+                        ),
+                        _InfoRow(
+                          label: 'Reference',
+                          value: ride.pickupReference.isEmpty ? 'Not specified' : ride.pickupReference,
+                          isLast: true,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Vehicle',
                   icon: Icons.directions_car_outlined,

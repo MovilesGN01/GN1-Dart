@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../../data/models/ride_details_model.dart';
 import '../../data/repositories/ride_repository.dart';
@@ -33,6 +33,16 @@ class RideDetailsViewModel extends ChangeNotifier {
     }
   }
 
+  void selectMeetingPoint(String value) {
+    if (_ride == null) return;
+    _ride = _ride!.copyWith(
+      selectedMeetingPoint: value,
+      pickupAddress: value,
+      pickupReference: 'Punto seleccionado por el pasajero',
+    );
+    notifyListeners();
+  }
+
   Future<void> refresh() async {
     final currentRideId = _ride?.id;
     if (currentRideId == null || currentRideId.isEmpty) return;
@@ -55,7 +65,6 @@ class RideDetailsViewModel extends ChangeNotifier {
 
     try {
       await _repository.reserveRide(currentRide.id, '');
-
       _ride = await _repository.getRideDetails(currentRide.id);
       return true;
     } catch (e) {
