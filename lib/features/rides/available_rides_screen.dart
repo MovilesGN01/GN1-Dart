@@ -7,8 +7,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
+import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
 import '../../features/rides/ride_viewmodel.dart';
+import '../../shared/widgets/location_disabled_banner.dart';
 
 // ── Local colour palette ──────────────────────────────────────────────────────
 abstract final class _RidesColors {
@@ -49,14 +51,6 @@ double _rankScore(RideModel r) =>
     (r.punctualityRate * 0.3) +
     (r.seatsAvailable * 0.2);
 
-String _latToNeighborhood(double lat) {
-  if (lat > 4.72) return 'Usaquén';
-  if (lat >= 4.68) return 'Suba';
-  if (lat >= 4.64) return 'Chapinero';
-  if (lat >= 4.60) return 'Teusaquillo';
-  if (lat >= 4.56) return 'Santa Fe';
-  return 'Kennedy';
-}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 class AvailableRidesScreen extends StatefulWidget {
@@ -93,8 +87,12 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
       final params = GoRouterState.of(context).uri.queryParameters;
       final from = params['from'] ?? '';
       final to = params['to'] ?? '';
+      final departure = params['departure'] ?? '';
       if (from.isNotEmpty) _fromController.text = from;
       if (to.isNotEmpty) _toController.text = to;
+      if (departure.isNotEmpty && _departureOptions.contains(departure)) {
+        _selectedDeparture = departure;
+      }
       if (from.isNotEmpty && to.isNotEmpty) _pendingAutoSearch = true;
 
       _tryAutoFillLocation();
@@ -145,9 +143,11 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     }
   }
 
-  // Feature 2 — GPS auto-fill FROM field
+  // Feature 2 — GPS auto-fill FROM field (zone detection via shared utility)
   Future<void> _tryAutoFillLocation() async {
     if (_fromController.text.isNotEmpty) return; // already filled, skip GPS
+
+    // Check service separately to control the disabled banner
     final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) setState(() => _locationServiceDisabled = true);
@@ -155,34 +155,11 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     }
     if (mounted) setState(() => _locationServiceDisabled = false);
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission denied. Enable it in Settings.'),
-          ),
-        );
-      }
-      return;
-    }
-
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
-      ).timeout(const Duration(seconds: 8));
-      if (mounted) {
-        _ignoreNextFromChange = true;
-        _fromController.text = _latToNeighborhood(position.latitude);
-        setState(() => _gpsAutoFilled = true);
-      }
-    } catch (_) {
-      // timeout or error — FROM field stays empty
+    final zone = await LocationUtils.detectZone();
+    if (zone != null && mounted) {
+      _ignoreNextFromChange = true;
+      _fromController.text = zone;
+      setState(() => _gpsAutoFilled = true);
     }
   }
 
@@ -252,7 +229,9 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
       });
     }
 
-    final sourceList = _hasSearched ? _filteredRides : vm.rides;
+    final now = DateTime.now();
+    final upcomingRides = vm.rides.where((r) => r.departureTime.isAfter(now)).toList();
+    final sourceList = _hasSearched ? _filteredRides : upcomingRides;
     List<RideModel> displayed = _applyChipFilter(sourceList);
     if (_hasSearched) {
       displayed = List<RideModel>.from(displayed)
@@ -297,7 +276,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_locationServiceDisabled) _buildLocationBanner(),
+              if (_locationServiceDisabled) const LocationDisabledBanner(),
               _buildSearchSummaryCard(),
               _FilterChipsRow(
                 activeFilter: _activeFilter,
@@ -357,29 +336,6 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildLocationBanner() {
-    return Container(
-      color: Colors.amber.shade100,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.location_off, color: Colors.orange, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Enable location to auto-detect your origin',
-              style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
-            ),
-          ),
-          TextButton(
-            onPressed: () async => Geolocator.openLocationSettings(),
-            child: const Text('Enable', style: TextStyle(fontSize: 12)),
-          ),
-        ],
       ),
     );
   }

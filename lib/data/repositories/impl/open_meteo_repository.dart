@@ -10,7 +10,7 @@ class OpenMeteoRepository implements WeatherRepository {
       'https://api.open-meteo.com/v1/forecast'
       '?latitude=4.6097&longitude=-74.0817'
       '&hourly=precipitation_probability,temperature_2m,weathercode'
-      '&forecast_days=1'
+      '&forecast_hours=1'
       '&timezone=America%2FBogota'
       '&current_weather=true';
 
@@ -28,29 +28,20 @@ class OpenMeteoRepository implements WeatherRepository {
           (currentWeather['temperature'] as num).toDouble();
       final weatherCode =
           (currentWeather['weathercode'] as num).toInt();
-      final currentTime = currentWeather['time'] as String;
 
-      // Find matching index in hourly times
-      final hourlyTimes = List<String>.from(hourly['time'] as List);
+      // Fix 1 — Null-safe precipitation parsing
+      final rawList = (hourly['precipitation_probability'] as List?) ?? [];
       final precipList =
-          List<int>.from((hourly['precipitation_probability'] as List)
-              .map((v) => (v as num).toInt()));
+          rawList.map((v) => v == null ? 0 : (v as num).toInt()).toList();
 
-      int currentIndex = hourlyTimes.indexOf(currentTime);
-      if (currentIndex < 0) currentIndex = 0;
-
-      // Max precipitation probability over next 3 hours
-      final endIndex =
-          (currentIndex + 3).clamp(0, precipList.length);
-      final relevantPrecip = precipList.sublist(currentIndex, endIndex);
-      final precipProb =
-          relevantPrecip.isEmpty ? 0 : relevantPrecip.reduce((a, b) => a > b ? a : b);
+      // Precipitation probability for the next hour only
+      final maxPrecip = precipList.isEmpty ? 0 : precipList.first;
 
       return WeatherData(
         temperature: temperature,
         description: _descriptionFromCode(weatherCode),
-        precipitationProbability: precipProb,
-        willRainSoon: precipProb >= 70,
+        precipitationProbability: maxPrecip,
+        willRainSoon: maxPrecip >= 10,
         weatherCode: weatherCode,
       );
     } catch (_) {

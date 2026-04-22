@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
+import 'package:uniride/shared/widgets/location_disabled_banner.dart';
 
+import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/home/weather_viewmodel.dart';
@@ -128,8 +133,11 @@ class _HomeScreenState extends State<HomeScreen> {
               _HomeHeader(firstName: firstName, initial: initial),
               const SizedBox(height: 8),
 
-              // Weather banner (conditional — show whenever weather is loaded)
-              if (_showWeatherBanner && weatherVm.weather != null) ...[
+              // Weather banner (conditional — only when rides are available and rain is expected)
+              if (_showWeatherBanner &&
+                  (weatherVm.weather?.willRainSoon ?? false) &&
+                  !rideVm.isLoading &&
+                  rideVm.rides.isNotEmpty) ...[
                 _WeatherBanner(
                   onDismiss: () =>
                       setState(() => _showWeatherBanner = false),
@@ -327,7 +335,7 @@ class _WeatherBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '🌧 Rain expected today — $prob% chance.',
+                  '🌧 Rain expected in the next 2 days — $prob% chance.',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -382,16 +390,56 @@ class _SearchCardState extends State<_SearchCard> {
   final TextEditingController _fromController = TextEditingController();
   final TextEditingController _toController = TextEditingController();
   String _selectedTime = 'Now';
-  static const _timeOptions = [
-    'Now',
-    '7:00 AM',
-    '7:30 AM',
-    '8:00 AM',
-    '8:30 AM',
-  ];
+  bool _gpsAutoFilled = false;
+  bool _locationServiceDisabled = false;
+  StreamSubscription<ServiceStatus>? _locationServiceStream;
+
+  static const _timeOptions = ['Now', 'In 30 min', 'In 1 hour', 'In 2 hours'];
+
+  @override
+  void initState() {
+    super.initState();
+    _fromController.addListener(_onFromChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _tryAutoFillLocation();
+      _locationServiceStream = Geolocator.getServiceStatusStream().listen(
+        (ServiceStatus status) {
+          if (!mounted) return;
+          if (status == ServiceStatus.enabled) {
+            setState(() => _locationServiceDisabled = false);
+            _tryAutoFillLocation();
+          } else {
+            setState(() => _locationServiceDisabled = true);
+          }
+        },
+      );
+    });
+  }
+
+  void _onFromChanged() {
+    if (_gpsAutoFilled) setState(() => _gpsAutoFilled = false);
+  }
+
+  Future<void> _tryAutoFillLocation() async {
+    if (_fromController.text.isNotEmpty) return;
+    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) setState(() => _locationServiceDisabled = true);
+      return;
+    }
+    if (mounted) setState(() => _locationServiceDisabled = false);
+    final zone = await LocationUtils.detectZone();
+    if (zone != null && mounted && _fromController.text.isEmpty) {
+      _fromController.text = zone;
+      setState(() => _gpsAutoFilled = true);
+    }
+  }
 
   @override
   void dispose() {
+    _locationServiceStream?.cancel();
+    _fromController.removeListener(_onFromChanged);
     _fromController.dispose();
     _toController.dispose();
     super.dispose();
@@ -422,6 +470,16 @@ class _SearchCardState extends State<_SearchCard> {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_locationServiceDisabled) const LocationDisabledBanner(),
+        _buildCard(context),
+      ],
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       padding: const EdgeInsets.all(16),
@@ -449,6 +507,13 @@ class _SearchCardState extends State<_SearchCard> {
             style: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.textPrimary),
             decoration: _fieldDecoration('Enter origin', Icons.circle, 10),
           ),
+          if (_gpsAutoFilled) ...[
+            const SizedBox(height: 3),
+            Text(
+              '📍 Detected automatically — tap to edit',
+              style: GoogleFonts.poppins(fontSize: 10, color: _HomeColors.muted),
+            ),
+          ],
           const SizedBox(height: 8),
 
           // Connector
@@ -526,7 +591,8 @@ class _SearchCardState extends State<_SearchCard> {
               onPressed: () {
                 final from = Uri.encodeComponent(_fromController.text.trim());
                 final to = Uri.encodeComponent(_toController.text.trim());
-                context.go('/rides?from=$from&to=$to');
+                final dep = Uri.encodeComponent(_selectedTime);
+                context.go('/rides?from=$from&to=$to&departure=$dep');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _HomeColors.primary,
