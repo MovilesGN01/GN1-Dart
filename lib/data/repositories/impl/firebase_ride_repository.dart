@@ -1,8 +1,4 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:http/http.dart' as http;
 
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
@@ -11,16 +7,9 @@ import '../ride_repository.dart';
 class FirebaseRideRepository implements RideRepository {
   FirebaseRideRepository({
     FirebaseFirestore? firestore,
-    FirebaseFunctions? functions,
-    http.Client? httpClient,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions =
-            functions ?? FirebaseFunctions.instanceFor(region: 'us-central1'),
-        _httpClient = httpClient ?? http.Client();
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  final FirebaseFunctions _functions;
-  final http.Client _httpClient;
 
   @override
   Future<List<RideModel>> getAvailableRides() async {
@@ -29,12 +18,9 @@ class FirebaseRideRepository implements RideRepository {
         .where('status', isEqualTo: 'available')
         .get();
 
-    final rides = snapshot.docs
+    return snapshot.docs
         .map((doc) => RideModel.fromMap(doc.data(), doc.id))
         .toList();
-
-    rides.sort((a, b) => a.departureTime.compareTo(b.departureTime));
-    return rides;
   }
 
   @override
@@ -44,119 +30,201 @@ class FirebaseRideRepository implements RideRepository {
         .where('status', isEqualTo: 'available')
         .get();
 
-    List<RideModel> rides = snapshot.docs
+    return snapshot.docs
         .map((doc) => RideModel.fromMap(doc.data(), doc.id))
         .toList();
-
-    rides = rides.where((ride) => ride.driverRating >= 4.5).toList();
-
-    bool hasRain = false;
-
-    try {
-      final response = await _httpClient.get(
-        Uri.parse(
-          'https://api.open-meteo.com/v1/forecast'
-          '?latitude=4.6097&longitude=-74.0817&current_weather=true',
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        final currentWeather =
-            json['current_weather'] as Map<String, dynamic>? ?? {};
-        final weatherCode = (currentWeather['weathercode'] as num?)?.toInt();
-
-        const rainyCodes = {
-          51, 53, 55,
-          61, 63, 65,
-          66, 67,
-          80, 81, 82,
-          95, 96, 99,
-        };
-
-        hasRain = weatherCode != null && rainyCodes.contains(weatherCode);
-      }
-    } catch (_) {
-      hasRain = false;
-    }
-
-    for (final ride in rides) {
-      ride.hasRainForecast = hasRain;
-    }
-
-    rides.sort((a, b) {
-      final ratingCompare = b.driverRating.compareTo(a.driverRating);
-      if (ratingCompare != 0) return ratingCompare;
-      return a.departureTime.compareTo(b.departureTime);
-    });
-
-    return rides;
   }
 
   @override
   Future<RideDetailsModel> getRideDetails(String rideId) async {
-    try {
-      final callable = _functions.httpsCallable(
-        'getRideDetails',
-        options: HttpsCallableOptions(
-          timeout: const Duration(seconds: 15),
-        ),
-      );
+    final rideDoc = await _firestore.collection('rides').doc(rideId).get();
 
-      final result = await callable.call<Map<String, dynamic>>({
-        'rideId': rideId,
-      });
-
-      final rawData = result.data;
-      return RideDetailsModel.fromMap(
-        Map<String, dynamic>.from(rawData),
-      );
-    } on FirebaseFunctionsException catch (e) {
-      throw Exception(_mapFunctionsError(e));
-    } catch (_) {
-      throw Exception('No se pudieron cargar los detalles del ride.');
+    if (!rideDoc.exists || rideDoc.data() == null) {
+      throw Exception('No se encontró el ride.');
     }
+
+    final rideData = rideDoc.data()!;
+
+    final rawDriverId = (rideData['driverId'] as String?) ?? '';
+    final driverId = _normalizeDriverId(rawDriverId);
+
+    Map<String, dynamic> driverData = {};
+    if (driverId.isNotEmpty) {
+      final driverDoc = await _firestore.collection('users').doc(driverId).get();
+      if (driverDoc.exists && driverDoc.data() != null) {
+        driverData = driverDoc.data()!;
+      }
+    }
+
+    final departureTime = _readDateTime(rideData['departureTime']) ?? DateTime.now();
+    final estimatedArrivalTime = _readDateTime(rideData['estimatedArrivalTime']);
+
+    final estimatedDurationMinutes = estimatedArrivalTime != null
+        ? estimatedArrivalTime.difference(departureTime).inMinutes
+        : 0;
+
+    final meetingPoints = ((rideData['meetingPoints'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+
+    final driverName = _firstNonEmpty([
+          rideData['driverName']?.toString(),
+          rideData['name']?.toString(),
+          driverData['driverName']?.toString(),
+          driverData['name']?.toString(),
+        ]) ??
+        'Conductor';
+
+    final driverRating =
+        _readDouble(rideData['driverRating']) ??
+        _readDouble(rideData['reputationScore']) ??
+        _readDouble(driverData['driverRating']) ??
+        _readDouble(driverData['reputationScore']) ??
+        0.0;
+
+    final isFemaleDriver =
+        (rideData['isFemaleDriver'] as bool?) ??
+        ((rideData['gender']?.toString().toLowerCase() == 'female') ||
+            (driverData['gender']?.toString().toLowerCase() == 'female'));
+
+    final vehicleModel = _firstNonEmpty([
+          rideData['vehicleModel']?.toString(),
+          rideData['carModel']?.toString(),
+          driverData['vehicleModel']?.toString(),
+          driverData['carModel']?.toString(),
+        ]) ??
+        '';
+
+    final vehiclePlate = _firstNonEmpty([
+          rideData['vehiclePlate']?.toString(),
+          rideData['plate']?.toString(),
+          driverData['vehiclePlate']?.toString(),
+          driverData['plate']?.toString(),
+        ]) ??
+        '';
+
+    final punctualityRate =
+        _readDouble(rideData['punctualityRate']) ??
+        _readDouble(driverData['punctualityRate']) ??
+        0.0;
+
+    final verified =
+        (rideData['verified'] as bool?) ??
+        (driverData['verified'] as bool?) ??
+        false;
+
+    final badges = <String>[
+      if (verified) 'Verified student',
+      if (driverRating >= 4.7) 'High rating',
+      if (punctualityRate >= 0.9) 'Highly punctual',
+    ];
+
+    final amenities = <String>[
+      if (meetingPoints.length > 1) 'Multiple pickup points',
+    ];
+
+    return RideDetailsModel(
+      id: rideDoc.id,
+      driverId: driverId,
+      driverName: driverName,
+      driverPhotoUrl: '',
+      driverRating: driverRating,
+      isFemaleDriver: isFemaleDriver,
+      origin: (rideData['origin'] as String?) ?? '',
+      destination: (rideData['destination'] as String?) ?? '',
+      departureTime: departureTime,
+      estimatedDurationMinutes: estimatedDurationMinutes,
+      price: _readDouble(rideData['price']) ?? 0.0,
+      seatsAvailable:
+          (rideData['seatsAvailable'] as num?)?.toInt() ??
+          (rideData['seats'] as num?)?.toInt() ??
+          0,
+      status: (rideData['status'] as String?) ?? 'available',
+      zone: (rideData['zone'] as String?) ?? '',
+      pickupAddress: meetingPoints.isNotEmpty ? meetingPoints.first : '',
+      pickupReference: meetingPoints.length > 1
+          ? 'Selecciona uno de los puntos disponibles'
+          : '',
+      vehicleBrand: '',
+      vehicleModel: vehicleModel,
+      vehicleColor: '',
+      vehiclePlate: vehiclePlate,
+      amenities: amenities,
+      badges: badges,
+      notes: meetingPoints.isNotEmpty
+          ? 'Puntos de recogida disponibles: ${meetingPoints.join(', ')}'
+          : '',
+      isReservedByCurrentUser: false,
+      meetingPoints: meetingPoints,
+      selectedMeetingPoint: meetingPoints.isNotEmpty ? meetingPoints.first : null,
+    );
   }
 
   @override
   Future<void> reserveRide(String rideId, String userId) async {
-    try {
-      final callable = _functions.httpsCallable(
-        'reserveRide',
-        options: HttpsCallableOptions(
-          timeout: const Duration(seconds: 15),
-        ),
-      );
+    final rideRef = _firestore.collection('rides').doc(rideId);
 
-      await callable.call<Map<String, dynamic>>({
-        'rideId': rideId,
-        'userId': userId,
+    await _firestore.runTransaction((transaction) async {
+      final rideSnap = await transaction.get(rideRef);
+
+      if (!rideSnap.exists) {
+        throw Exception('Ride no encontrado.');
+      }
+
+      final data = rideSnap.data()!;
+      final seatsAvailable =
+          (data['seatsAvailable'] as num?)?.toInt() ??
+          (data['seats'] as num?)?.toInt() ??
+          0;
+
+      if (seatsAvailable <= 0) {
+        throw Exception('No hay asientos disponibles.');
+      }
+
+      transaction.update(rideRef, {
+        'seatsAvailable': seatsAvailable - 1,
+        'seats': seatsAvailable - 1,
       });
-    } on FirebaseFunctionsException catch (e) {
-      throw Exception(_mapFunctionsError(e));
-    } catch (_) {
-      throw Exception('No se pudo reservar el ride.');
-    }
+
+      if (userId.isNotEmpty) {
+        final passengerRef =
+            rideRef.collection('passengers').doc(userId);
+        transaction.set(passengerRef, {
+          'userId': userId,
+          'reservedAt': FieldValue.serverTimestamp(),
+          'status': 'confirmed',
+        });
+      }
+    });
   }
 
-  String _mapFunctionsError(FirebaseFunctionsException e) {
-    switch (e.code) {
-      case 'unauthenticated':
-        return 'Debes iniciar sesión para continuar.';
-      case 'invalid-argument':
-        return 'La solicitud no es válida.';
-      case 'not-found':
-        return 'No se encontró el ride solicitado.';
-      case 'already-exists':
-        return 'Ya reservaste este ride.';
-      case 'failed-precondition':
-        return 'Ya no hay cupos disponibles.';
-      case 'deadline-exceeded':
-        return 'La operación tardó demasiado. Intenta de nuevo.';
-      case 'unavailable':
-        return 'El servicio no está disponible en este momento.';
-      default:
-        return e.message ?? 'Ocurrió un error inesperado.';
+  String _normalizeDriverId(String raw) {
+    if (raw.isEmpty) return '';
+    if (raw.contains('/')) {
+      final parts = raw.split('/');
+      return parts.where((e) => e.trim().isNotEmpty).last;
     }
+    return raw;
+  }
+
+  DateTime? _readDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  double? _readDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  String? _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      if (value != null && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
   }
 }
