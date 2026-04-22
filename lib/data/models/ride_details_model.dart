@@ -30,6 +30,9 @@ class RideDetailsModel {
   final bool isFemaleDriver;
   final bool isReservedByCurrentUser;
 
+  final List<String> meetingPoints;
+  final String? selectedMeetingPoint;
+
   const RideDetailsModel({
     required this.id,
     required this.driverId,
@@ -55,6 +58,8 @@ class RideDetailsModel {
     required this.notes,
     required this.isFemaleDriver,
     required this.isReservedByCurrentUser,
+    required this.meetingPoints,
+    required this.selectedMeetingPoint,
   });
 
   factory RideDetailsModel.fromMap(Map<String, dynamic> data) {
@@ -75,6 +80,15 @@ class RideDetailsModel {
       (data['vehicle'] as Map?) ?? const {},
     );
 
+    final rawMeetingPoints = (data['meetingPoints'] as List?) ?? const [];
+    final meetingPoints = rawMeetingPoints
+        .map((e) => e.toString())
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+
+    final selectedMeetingPoint = data['selectedMeetingPoint'] as String? ??
+        (meetingPoints.isNotEmpty ? meetingPoints.first : null);
+
     return RideDetailsModel(
       id: data['id'] as String? ?? '',
       driverId: data['driverId'] as String? ?? '',
@@ -87,21 +101,30 @@ class RideDetailsModel {
       estimatedDurationMinutes:
           (data['estimatedDurationMinutes'] as num?)?.toInt() ?? 0,
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
-      seatsAvailable: (data['seatsAvailable'] as num?)?.toInt() ?? 0,
+      seatsAvailable: (data['seatsAvailable'] as num?)?.toInt() ??
+          (data['seats'] as num?)?.toInt() ??
+          0,
       status: data['status'] as String? ?? 'available',
       zone: data['zone'] as String? ?? '',
-      pickupAddress: pickup['address'] as String? ?? '',
+      pickupAddress: pickup['address'] as String? ??
+          (meetingPoints.isNotEmpty ? meetingPoints.first : ''),
       pickupReference: pickup['reference'] as String? ?? '',
       vehicleBrand: vehicle['brand'] as String? ?? '',
-      vehicleModel: vehicle['model'] as String? ?? '',
+      vehicleModel: vehicle['model'] as String? ??
+          data['carModel'] as String? ??
+          '',
       vehicleColor: vehicle['color'] as String? ?? '',
-      vehiclePlate: vehicle['plate'] as String? ?? '',
+      vehiclePlate: vehicle['plate'] as String? ??
+          data['plate'] as String? ??
+          '',
       amenities: List<String>.from(data['amenities'] ?? const []),
       badges: List<String>.from(data['badges'] ?? const []),
       notes: data['notes'] as String? ?? '',
       isFemaleDriver: data['isFemaleDriver'] as bool? ?? false,
       isReservedByCurrentUser:
           data['isReservedByCurrentUser'] as bool? ?? false,
+      meetingPoints: meetingPoints,
+      selectedMeetingPoint: selectedMeetingPoint,
     );
   }
 
@@ -135,6 +158,8 @@ class RideDetailsModel {
       'notes': notes,
       'isFemaleDriver': isFemaleDriver,
       'isReservedByCurrentUser': isReservedByCurrentUser,
+      'meetingPoints': meetingPoints,
+      'selectedMeetingPoint': selectedMeetingPoint,
     };
   }
 
@@ -163,6 +188,8 @@ class RideDetailsModel {
     String? notes,
     bool? isFemaleDriver,
     bool? isReservedByCurrentUser,
+    List<String>? meetingPoints,
+    String? selectedMeetingPoint,
   }) {
     return RideDetailsModel(
       id: id ?? this.id,
@@ -191,6 +218,9 @@ class RideDetailsModel {
       isFemaleDriver: isFemaleDriver ?? this.isFemaleDriver,
       isReservedByCurrentUser:
           isReservedByCurrentUser ?? this.isReservedByCurrentUser,
+      meetingPoints: meetingPoints ?? this.meetingPoints,
+      selectedMeetingPoint:
+          selectedMeetingPoint ?? this.selectedMeetingPoint,
     );
   }
 }
