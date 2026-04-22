@@ -9,6 +9,8 @@ import 'data/repositories/impl/firebase_ride_repository.dart';
 import 'features/auth/auth_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
 import 'firebase_options.dart';
+import 'features/chatbot/data/chatbot_service.dart';
+import 'features/chatbot/state/chatbot_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +34,9 @@ class UniRideBootstrap extends StatelessWidget {
         ),
         ChangeNotifierProvider<RideViewModel>(
           create: (_) => RideViewModel(FirebaseRideRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ChatbotController(ChatbotService()),
         ),
       ],
       child: const UniRideApp(),
