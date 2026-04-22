@@ -7,10 +7,7 @@ import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 import '../../data/models/ride_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/rides/ride_viewmodel.dart';
-
-import 'package:uniride/features/chatbot/data/chatbot_service.dart';
-import 'package:uniride/features/chatbot/presentation/chatbot_sheet.dart';
-import 'package:uniride/features/chatbot/state/chatbot_controller.dart';
+import '../chatbot/presentation/chatbot_sheet.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _HomeColors {
@@ -101,119 +98,106 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final List<_RideData> displayRides =
         rideVm.rides.map(_RideData.fromModel).toList();
-
-    return Scaffold(
-      backgroundColor: _HomeColors.background,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _HomeColors.primary,
-        tooltip: 'Asistente UniRide',
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.white,
-            builder: (_) {
-              return ChangeNotifierProvider(
-                create: (_) => ChatbotController(ChatbotService()),
-                child: const ChatbotSheet(),
-              );
-            },
-          );
-        },
-        child: const Icon(
-          Icons.smart_toy_outlined,
-          color: _HomeColors.background,
-        ),
-      ),
-      bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              _HomeHeader(firstName: firstName, initial: initial),
-              const SizedBox(height: 8),
-
-              // Weather banner (conditional)
-              if (_showWeatherBanner) ...[
-                _WeatherBanner(
-                  onDismiss: () =>
-                      setState(() => _showWeatherBanner = false),
-                ),
-                const SizedBox(height: 8),
-              ],
-
-              // Search card
-              const _SearchCard(),
-              const SizedBox(height: 16),
-
-              // Explore alternatives
-              const _ExploreAlternatives(),
-              const SizedBox(height: 16),
-
-              // Available rides
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'Available Now',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: _HomeColors.textPrimary,
-                  ),
-                ),
+          return Scaffold(
+            floatingActionButton: FloatingActionButton(
+              backgroundColor: _HomeColors.primary,
+              tooltip: 'Asistente UniRide',
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const ChatbotSheet(),
+                );
+              },
+              child: const Icon(
+                Icons.smart_toy_outlined,
+                color: _HomeColors.background,
               ),
-              const SizedBox(height: 12),
+            ),
+        bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HomeHeader(firstName: firstName, initial: initial),
+                const SizedBox(height: 8),
 
-              if (rideVm.isLoading)
-                const SizedBox(
-                  height: 160,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (rideVm.errorMessage != null)
+                if (_showWeatherBanner) ...[
+                  _WeatherBanner(
+                    onDismiss: () => setState(() => _showWeatherBanner = false),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                const _SearchCard(),
+                const SizedBox(height: 16),
+
+                const _ExploreAlternatives(),
+                const SizedBox(height: 16),
+
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    rideVm.errorMessage!,
+                    'Available Now',
                     style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: Colors.red,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _HomeColors.textPrimary,
                     ),
-                  ),
-                )
-              else if (displayRides.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'No rides available right now.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: _HomeColors.muted,
-                    ),
-                  ),
-                )
-              else
-                SizedBox(
-                  height: 160,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: displayRides.length,
-                    itemBuilder: (_, i) => _RideCard(ride: displayRides[i]),
                   ),
                 ),
+                const SizedBox(height: 12),
 
-              const SizedBox(height: 16),
+                if (rideVm.isLoading)
+                  const SizedBox(
+                    height: 160,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (rideVm.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      rideVm.errorMessage!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.red,
+                      ),
+                    ),
+                  )
+                else if (displayRides.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'No rides available right now.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: _HomeColors.muted,
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 160,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: displayRides.length,
+                      itemBuilder: (_, i) => _RideCard(ride: displayRides[i]),
+                    ),
+                  ),
 
-              // Recurring rides
-              const _RecurringRidesSection(),
-              const SizedBox(height: 24),
-            ],
+                const SizedBox(height: 16),
+                const _RecurringRidesSection(),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+
+
   }
 }
 
