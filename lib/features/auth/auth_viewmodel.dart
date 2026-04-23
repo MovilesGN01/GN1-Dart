@@ -11,10 +11,12 @@ class AuthViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   UserModel? _currentUser;
+  List<Map<String, dynamic>> _recurringRoutes = [];
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   UserModel? get currentUser => _currentUser;
+  List<Map<String, dynamic>> get recurringRoutes => _recurringRoutes;
 
   Future<bool> signIn(String email, String password) async {
     _isLoading = true;
@@ -58,5 +60,12 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<int> getQueuePosition(String userId, String rideId) {
     return _repository.getQueuePosition(userId, rideId);
+  }
+
+  Future<void> loadRecurringRoutes() async {
+    final userId = await _repository.getCurrentUserId();
+    if (userId == null) return;
+    _recurringRoutes = await _repository.getRecurringRoutes(userId);
+    notifyListeners();
   }
 }

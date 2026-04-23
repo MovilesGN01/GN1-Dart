@@ -39,4 +39,12 @@ class MockUserRepository implements UserRepository {
   Future<int> getQueuePosition(String userId, String rideId) async {
     return 1;
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> getRecurringRoutes(String userId) async {
+    return [
+      {'origin': 'Chapinero', 'destination': 'Campus Uniandes', 'count': 4},
+      {'origin': 'Usaquén', 'destination': 'Campus Uniandes', 'count': 2},
+    ];
+  }
 }
