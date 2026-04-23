@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
+import 'package:uniride/shared/widgets/location_disabled_banner.dart';
 
+import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
+import '../../features/home/weather_viewmodel.dart';
 import '../../features/rides/ride_viewmodel.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
@@ -18,7 +24,6 @@ abstract final class _HomeColors {
   static const cardSurface   = Color(0xFFF8FAFC);
   static const border        = Color(0xFFE5E7EB);
   static const weatherBg     = Color(0xFFEFF6FF);
-  static const amber         = Color(0xFFF59E0B);
   static const badgeBg       = Color(0xFFE8F5E9);
   static const badgeText     = Color(0xFF2E7D32);
 }
@@ -83,20 +88,29 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     context.read<RideViewModel>().loadAvailableRides();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<WeatherViewModel>().loadWeather();
+      context.read<AuthViewModel>().loadRecurringRoutes();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final rideVm = context.watch<RideViewModel>();
     final authVm = context.watch<AuthViewModel>();
+    final weatherVm = context.watch<WeatherViewModel>();
 
     final String firstName = authVm.currentUser?.name.split(' ').first ?? 'there';
     final String initial = authVm.currentUser?.name.isNotEmpty == true
         ? authVm.currentUser!.name[0].toUpperCase()
         : '?';
 
+    final now = DateTime.now();
+    final upcomingRides = rideVm.rides.where((r) =>
+        r.departureTime.isAfter(now) &&
+        r.departureTime.isBefore(now.add(const Duration(minutes: 30)))).toList();
     final List<_RideData> displayRides =
-        rideVm.rides.map(_RideData.fromModel).toList();
+        upcomingRides.map(_RideData.fromModel).toList();
 
     return Scaffold(
       backgroundColor: _HomeColors.background,
@@ -119,8 +133,11 @@ class _HomeScreenState extends State<HomeScreen> {
               _HomeHeader(firstName: firstName, initial: initial),
               const SizedBox(height: 8),
 
-              // Weather banner (conditional)
-              if (_showWeatherBanner) ...[
+              // Weather banner (conditional — only when rides are available and rain is expected)
+              if (_showWeatherBanner &&
+                  (weatherVm.weather?.willRainSoon ?? false) &&
+                  !rideVm.isLoading &&
+                  rideVm.rides.isNotEmpty) ...[
                 _WeatherBanner(
                   onDismiss: () =>
                       setState(() => _showWeatherBanner = false),
@@ -170,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'No rides available right now.',
+                    'No rides available in the next 30 minutes.',
                     style: GoogleFonts.poppins(
                       fontSize: 13,
                       color: _HomeColors.muted,
@@ -191,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
 
               // Recurring rides
-              const _RecurringRidesSection(),
+              _RecurringRidesSection(routes: authVm.recurringRoutes),
               const SizedBox(height: 24),
             ],
           ),
@@ -227,7 +244,7 @@ class _HomeHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,6 +265,7 @@ class _HomeHeader extends StatelessWidget {
                     color: _HomeColors.textPrimary,
                   ),
                 ),
+                // ⚠️ AQUÍ ESTÁ LA CORRECCIÓN DEL NUEVO OVERFLOW
                 Row(
                   children: [
                     const Icon(
@@ -256,11 +274,17 @@ class _HomeHeader extends StatelessWidget {
                       color: _HomeColors.primary,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      'Uniandes · Verified Student',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: _HomeColors.primary,
+                    // 1. Envolvemos el texto en Flexible
+                    Flexible(
+                      child: Text(
+                        'Uniandes · Verified Student',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: _HomeColors.primary,
+                        ),
+                        // 2. Le indicamos que corte con puntos suspensivos si no cabe
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -268,7 +292,7 @@ class _HomeHeader extends StatelessWidget {
               ],
             ),
           ),
-          const _WeatherChip(),
+          const _WeatherChip(), // Mantén este con la corrección anterior
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(
@@ -290,6 +314,10 @@ class _WeatherBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final prob = context.watch<WeatherViewModel>()
+            .weather
+            ?.precipitationProbability ??
+        0;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       padding: const EdgeInsets.all(16),
@@ -307,7 +335,7 @@ class _WeatherBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Rain tomorrow 7–9 AM',
+                  '🌧 Rain expected in the next 2 days — $prob% chance.',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -315,7 +343,7 @@ class _WeatherBanner extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'High demand expected · 3 drivers available',
+                  'Book a high-rated ride now.',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: _HomeColors.textSecondary,
@@ -359,17 +387,99 @@ class _SearchCard extends StatefulWidget {
 }
 
 class _SearchCardState extends State<_SearchCard> {
+  final TextEditingController _fromController = TextEditingController();
+  final TextEditingController _toController = TextEditingController();
   String _selectedTime = 'Now';
-  static const _timeOptions = [
-    'Now',
-    '7:00 AM',
-    '7:30 AM',
-    '8:00 AM',
-    '8:30 AM',
-  ];
+  bool _gpsAutoFilled = false;
+  bool _locationServiceDisabled = false;
+  StreamSubscription<ServiceStatus>? _locationServiceStream;
+
+  static const _timeOptions = ['Now', 'In 30 min', 'In 1 hour', 'In 2 hours'];
+
+  @override
+  void initState() {
+    super.initState();
+    _fromController.addListener(_onFromChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _tryAutoFillLocation();
+      _locationServiceStream = Geolocator.getServiceStatusStream().listen(
+        (ServiceStatus status) {
+          if (!mounted) return;
+          if (status == ServiceStatus.enabled) {
+            setState(() => _locationServiceDisabled = false);
+            _tryAutoFillLocation();
+          } else {
+            setState(() => _locationServiceDisabled = true);
+          }
+        },
+      );
+    });
+  }
+
+  void _onFromChanged() {
+    if (_gpsAutoFilled) setState(() => _gpsAutoFilled = false);
+  }
+
+  Future<void> _tryAutoFillLocation() async {
+    if (_fromController.text.isNotEmpty) return;
+    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) setState(() => _locationServiceDisabled = true);
+      return;
+    }
+    if (mounted) setState(() => _locationServiceDisabled = false);
+    final zone = await LocationUtils.detectZone();
+    if (zone != null && mounted && _fromController.text.isEmpty) {
+      _fromController.text = zone;
+      setState(() => _gpsAutoFilled = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _locationServiceStream?.cancel();
+    _fromController.removeListener(_onFromChanged);
+    _fromController.dispose();
+    _toController.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _fieldDecoration(String hint, IconData icon, double iconSize) {
+    return InputDecoration(
+      prefixIcon: Icon(icon, size: iconSize, color: _HomeColors.primary),
+      hintText: hint,
+      hintStyle: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.muted),
+      filled: true,
+      fillColor: _HomeColors.background,
+      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _HomeColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _HomeColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _HomeColors.primary),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_locationServiceDisabled) const LocationDisabledBanner(),
+        _buildCard(context),
+      ],
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       padding: const EdgeInsets.all(16),
@@ -392,11 +502,18 @@ class _SearchCardState extends State<_SearchCard> {
           const SizedBox(height: 12),
 
           // FROM
-          const _SearchField(
-            icon: Icons.circle,
-            iconSize: 10,
-            label: '  From: Chapinero',
+          TextField(
+            controller: _fromController,
+            style: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.textPrimary),
+            decoration: _fieldDecoration('Enter origin', Icons.circle, 10),
           ),
+          if (_gpsAutoFilled) ...[
+            const SizedBox(height: 3),
+            Text(
+              '📍 Detected automatically — tap to edit',
+              style: GoogleFonts.poppins(fontSize: 10, color: _HomeColors.muted),
+            ),
+          ],
           const SizedBox(height: 8),
 
           // Connector
@@ -409,10 +526,10 @@ class _SearchCardState extends State<_SearchCard> {
           const SizedBox(height: 8),
 
           // TO
-          const _SearchField(
-            icon: Icons.location_on,
-            iconSize: 16,
-            label: '  To: Campus Uniandes',
+          TextField(
+            controller: _toController,
+            style: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.textPrimary),
+            decoration: _fieldDecoration('Enter destination', Icons.location_on, 16),
           ),
           const SizedBox(height: 8),
 
@@ -471,7 +588,12 @@ class _SearchCardState extends State<_SearchCard> {
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
-              onPressed: () => context.go('/rides'),
+              onPressed: () {
+                final from = Uri.encodeComponent(_fromController.text.trim());
+                final to = Uri.encodeComponent(_toController.text.trim());
+                final dep = Uri.encodeComponent(_selectedTime);
+                context.go('/rides?from=$from&to=$to&departure=$dep');
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _HomeColors.primary,
                 foregroundColor: _HomeColors.background,
@@ -493,41 +615,6 @@ class _SearchCardState extends State<_SearchCard> {
   }
 }
 
-class _SearchField extends StatelessWidget {
-  const _SearchField({
-    required this.icon,
-    required this.iconSize,
-    required this.label,
-  });
-
-  final IconData icon;
-  final double iconSize;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _HomeColors.background,
-        border: Border.all(color: _HomeColors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: iconSize, color: _HomeColors.primary),
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: _HomeColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _RideCard extends StatelessWidget {
   const _RideCard({required this.ride});
@@ -624,7 +711,9 @@ class _RideCard extends StatelessWidget {
 }
 
 class _RecurringRidesSection extends StatelessWidget {
-  const _RecurringRidesSection();
+  const _RecurringRidesSection({required this.routes});
+
+  final List<Map<String, dynamic>> routes;
 
   @override
   Widget build(BuildContext context) {
@@ -656,49 +745,61 @@ class _RecurringRidesSection extends StatelessWidget {
             ],
           ),
         ),
-        ListTile(
-          leading: const CircleAvatar(
-            backgroundColor: _HomeColors.weatherBg,
-            child: Icon(Icons.home_outlined, color: _HomeColors.primary),
-          ),
-          title: Text(
-            'Home → Campus',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: _HomeColors.textPrimary,
+        if (routes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'No recurring rides yet.',
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: _HomeColors.muted,
+              ),
             ),
-          ),
-          subtitle: Text(
-            'Mon, Wed, Fri · 08:30 AM',
-            style: GoogleFonts.poppins(fontSize: 12, color: _HomeColors.muted),
-          ),
-        ),
-        const Divider(
-          color: _HomeColors.border,
-          thickness: 1,
-          height: 1,
-          indent: 16,
-          endIndent: 16,
-        ),
-        ListTile(
-          leading: const CircleAvatar(
-            backgroundColor: _HomeColors.weatherBg,
-            child: Icon(Icons.school_outlined, color: _HomeColors.primary),
-          ),
-          title: Text(
-            'Work → Campus',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: _HomeColors.textPrimary,
-            ),
-          ),
-          subtitle: Text(
-            'Daily · 05:45 PM',
-            style: GoogleFonts.poppins(fontSize: 12, color: _HomeColors.muted),
-          ),
-        ),
+          )
+        else
+          ...routes.asMap().entries.map((entry) {
+            final i = entry.key;
+            final route = entry.value;
+            final origin = route['origin'] as String? ?? '';
+            final destination = route['destination'] as String? ?? 'Campus Uniandes';
+            final count = route['count'] as int? ?? 0;
+            return Column(
+              children: [
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: _HomeColors.weatherBg,
+                    child: Icon(Icons.route, color: _HomeColors.primary),
+                  ),
+                  title: Text(
+                    '$origin → $destination',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: _HomeColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Used $count times this month',
+                    style: GoogleFonts.poppins(
+                        fontSize: 12, color: _HomeColors.muted),
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: _HomeColors.muted,
+                  ),
+                ),
+                if (i < routes.length - 1)
+                  const Divider(
+                    color: _HomeColors.border,
+                    thickness: 1,
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                  ),
+              ],
+            );
+          }),
       ],
     );
   }
@@ -709,48 +810,73 @@ class _WeatherChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final weather = context.watch<WeatherViewModel>().weather;
+
+    // Manejo de estado cuando el clima aún no carga
+    if (weather == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+        ),
+        child: const Text('--', style: TextStyle(fontSize: 11)),
+      );
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      // Reducimos un poco el ancho máximo ya que ahora es vertical
+      constraints: const BoxConstraints(maxWidth: 110),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: _HomeColors.cardSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _HomeColors.border),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12), // Un borde un poco menos redondo queda mejor con columnas
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 4),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.wb_sunny_outlined,
-            size: 16,
-            color: _HomeColors.amber,
-          ),
-          const SizedBox(width: 4),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '18°C',
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _HomeColors.textPrimary,
+          // Agrandé un poquitico el icono para que balancee con las dos líneas de texto
+          const Icon(Icons.wb_sunny, size: 16, color: Colors.orange),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Línea 1: Temperatura
+                Text(
+                  '${weather.temperature.toStringAsFixed(0)}°C',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700, // Un poco más gordita para destacar
+                    height: 1.1, // Reduce el salto de línea para que se vean unidos
+                  ),
                 ),
-              ),
-              Text(
-                'Sunny',
-                style: GoogleFonts.poppins(
-                  fontSize: 10,
-                  color: _HomeColors.muted,
+                // Línea 2: Descripción
+                Text(
+                  weather.description,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF555555), // Un gris sutil
+                    height: 1.1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 }
+
 
 class _ExploreAlternatives extends StatelessWidget {
   const _ExploreAlternatives();

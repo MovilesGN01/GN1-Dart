@@ -7,7 +7,9 @@ import 'core/routes.dart';
 import 'core/theme.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
 import 'data/repositories/impl/firebase_ride_repository.dart';
+import 'data/repositories/impl/open_meteo_repository.dart';
 import 'features/auth/auth_viewmodel.dart';
+import 'features/home/weather_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
 
 void main() async {
@@ -23,6 +25,9 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => AuthViewModel(FirebaseAuthRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => WeatherViewModel(OpenMeteoRepository()),
         ),
       ],
       child: const UniRideApp(),
