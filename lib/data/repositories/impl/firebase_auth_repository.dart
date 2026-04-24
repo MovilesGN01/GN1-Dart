@@ -79,6 +79,7 @@ class FirebaseAuthRepository implements UserRepository {
     required String email,
     required String password,
     required String role,
+    required String gender,
     required String vehiclePlate,
   }) async {
     final credential = await _auth.createUserWithEmailAndPassword(
@@ -94,6 +95,7 @@ class FirebaseAuthRepository implements UserRepository {
         'name': name,
         'email': email,
         'role': role,
+        'gender': gender,
         if (vehiclePlate.isNotEmpty) 'vehiclePlate': vehiclePlate,
       });
     } catch (e) {
