@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/data/repositories/impl/firebase_ride_repository.dart';
 import 'package:uniride/features/auth/login_screen.dart';
+import 'package:uniride/features/auth/register_screen.dart';
 import 'package:uniride/features/community/community_screen.dart';
 import 'package:uniride/features/home/home_screen.dart';
 import 'package:uniride/features/nfc/nfc_access_screen.dart';
@@ -16,6 +17,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/',
       builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) => const RegisterScreen(),
     ),
     GoRoute(
       path: '/home',
