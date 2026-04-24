@@ -1,11 +1,25 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/user_repository.dart';
 import 'register_viewmodel.dart';
+
+Widget? _limitCounter(
+  BuildContext context, {
+  required int currentLength,
+  required bool isFocused,
+  required int? maxLength,
+}) {
+  if (maxLength == null || currentLength < maxLength) return null;
+  return Text(
+    'Max $maxLength characters',
+    style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFFFF3B30)),
+  );
+}
 
 abstract final class _Colors {
   static const primary = Color(0xFF1F5DFF);
@@ -169,6 +183,8 @@ class _RegisterBodyState extends State<_RegisterBody> {
                             fontSize: 14, color: _Colors.textPrimary),
                         decoration: _fieldDecoration(
                             'Full name', Icons.person_outline),
+                        maxLength: 60,
+                        buildCounter: _limitCounter,
                         onChanged: (v) => vm.name = v,
                       ),
                       const SizedBox(height: 16),
@@ -183,6 +199,8 @@ class _RegisterBodyState extends State<_RegisterBody> {
                           'yourname@uniandes.edu.co',
                           Icons.email_outlined,
                         ),
+                        maxLength: 100,
+                        buildCounter: _limitCounter,
                         onChanged: (v) => vm.email = v,
                       ),
                       const SizedBox(height: 16),
@@ -207,6 +225,8 @@ class _RegisterBodyState extends State<_RegisterBody> {
                                 setState(() => _passwordVisible = !_passwordVisible),
                           ),
                         ),
+                        maxLength: 64,
+                        buildCounter: _limitCounter,
                         onChanged: (v) => vm.password = v,
                       ),
                       const SizedBox(height: 16),
@@ -231,6 +251,8 @@ class _RegisterBodyState extends State<_RegisterBody> {
                                 setState(() => _confirmVisible = !_confirmVisible),
                           ),
                         ),
+                        maxLength: 64,
+                        buildCounter: _limitCounter,
                         onChanged: (v) => vm.confirmPassword = v,
                       ),
                       const SizedBox(height: 16),
@@ -259,6 +281,39 @@ class _RegisterBodyState extends State<_RegisterBody> {
                       ),
                       const SizedBox(height: 16),
 
+                      // Gender selector
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _RoleButton(
+                              label: 'Male',
+                              icon: Icons.male,
+                              selected: vm.gender == 'male',
+                              onTap: () => vm.setGender('male'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _RoleButton(
+                              label: 'Female',
+                              icon: Icons.female,
+                              selected: vm.gender == 'female',
+                              onTap: () => vm.setGender('female'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _RoleButton(
+                              label: 'Other',
+                              icon: Icons.people_outline,
+                              selected: vm.gender == 'other',
+                              onTap: () => vm.setGender('other'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
                       // Vehicle plate (animated)
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
@@ -278,9 +333,15 @@ class _RegisterBodyState extends State<_RegisterBody> {
                                         fontSize: 14,
                                         color: _Colors.textPrimary),
                                     decoration: _fieldDecoration(
-                                      'ABC-123',
+                                      'ABC123',
                                       Icons.directions_car_outlined,
                                     ),
+                                    maxLength: 7,
+                                    buildCounter: _limitCounter,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                          RegExp(r'[A-Za-z0-9]')),
+                                    ],
                                     onChanged: (v) => vm.vehiclePlate = v,
                                   ),
                                   const SizedBox(height: 16),
