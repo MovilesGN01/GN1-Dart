@@ -23,6 +23,7 @@ dependencies:
 
   http: ^1.2.0
   flutter_nfc_kit: ^3.6.2
+  geolocator: ^13.0.0
 
 dev_dependencies:
   flutter_test:
