@@ -622,18 +622,7 @@ class _RideCard extends StatelessWidget {
     final String priceStr = _fmtPrice(ride.price);
 
     return GestureDetector(
-      onTap: () => context.push('/rides/details', extra: {
-        'name': ride.driverName,
-        'initial': ride.driverName.isNotEmpty ? ride.driverName[0] : '?',
-        'rating': ride.driverRating,
-        'from': ride.origin,
-        'to': ride.destination,
-        'time': timeStr,
-        'eta': '--',
-        'price': priceStr,
-        'seats': ride.seatsAvailable,
-        'isFemaleDriver': false,
-      }),
+      onTap: () => context.push('/rides/${ride.id}'),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         padding: const EdgeInsets.all(16),
