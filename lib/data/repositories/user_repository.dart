@@ -6,6 +6,14 @@ abstract class UserRepository {
 
   Future<void> signOut();
 
+  Future<void> registerUser({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+    required String vehiclePlate,
+  });
+
   Future<UserModel?> getUserProfile(String userId);
 
   /// Returns the UID of the currently signed-in user, or null if not signed in.
