@@ -7,6 +7,7 @@ import 'core/routes.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
 import 'data/repositories/impl/firebase_ride_repository.dart';
 import 'data/repositories/impl/open_meteo_repository.dart';
+import 'data/repositories/user_repository.dart';
 import 'features/auth/auth_viewmodel.dart';
 import 'features/home/weather_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
@@ -31,8 +32,11 @@ class UniRideBootstrap extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<UserRepository>(
+          create: (_) => FirebaseAuthRepository(),
+        ),
         ChangeNotifierProvider<AuthViewModel>(
-          create: (_) => AuthViewModel(FirebaseAuthRepository()),
+          create: (ctx) => AuthViewModel(ctx.read<UserRepository>()),
         ),
         ChangeNotifierProvider<RideViewModel>(
           create: (_) => RideViewModel(FirebaseRideRepository()),
