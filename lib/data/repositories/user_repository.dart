@@ -11,6 +11,7 @@ abstract class UserRepository {
     required String email,
     required String password,
     required String role,
+    required String gender,
     required String vehiclePlate,
   });
 

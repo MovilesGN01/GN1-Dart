@@ -41,6 +41,7 @@ class MockUserRepository implements UserRepository {
     required String email,
     required String password,
     required String role,
+    required String gender,
     required String vehiclePlate,
   }) async {
     await Future.delayed(const Duration(milliseconds: 500));
