@@ -19,10 +19,9 @@ dependencies:
   firebase_core: ^3.15.2
   firebase_auth: ^5.1.0
   cloud_firestore: ^5.2.0
-  cloud_functions: ^5.6.2
-
+  cloud_functions: ^5.0.0
   http: ^1.2.0
-  flutter_nfc_kit: ^3.6.2
+  nfc_manager: ^3.5.0
   geolocator: ^13.0.0
 
 dev_dependencies:
