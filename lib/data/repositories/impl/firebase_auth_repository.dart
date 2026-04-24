@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../user_repository.dart';
 import '../../models/user_model.dart';
@@ -70,6 +71,37 @@ class FirebaseAuthRepository implements UserRepository {
         .get();
 
     return snapshot.docs.length + 1;
+  }
+
+  @override
+  Future<void> registerUser({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+    required String gender,
+    required String vehiclePlate,
+  }) async {
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    final uid = credential.user!.uid;
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('createUserDocument');
+      await callable.call({
+        'uid': uid,
+        'name': name,
+        'email': email,
+        'role': role,
+        'gender': gender,
+        if (vehiclePlate.isNotEmpty) 'vehiclePlate': vehiclePlate,
+      });
+    } catch (e) {
+      await credential.user!.delete();
+      rethrow;
+    }
   }
 
   @override
