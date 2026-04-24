@@ -9,6 +9,8 @@ import 'data/repositories/impl/firebase_auth_repository.dart';
 import 'data/repositories/impl/firebase_ride_repository.dart';
 import 'data/repositories/impl/open_meteo_repository.dart';
 import 'features/auth/auth_viewmodel.dart';
+import 'features/chatbot/data/chatbot_service.dart';
+import 'features/chatbot/state/chatbot_controller.dart';
 import 'features/home/weather_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
 
@@ -28,6 +30,9 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => WeatherViewModel(OpenMeteoRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ChatbotController(ChatbotService()),
         ),
       ],
       child: const UniRideApp(),

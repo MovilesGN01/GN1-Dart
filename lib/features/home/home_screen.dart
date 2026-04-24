@@ -13,6 +13,7 @@ import '../../data/models/ride_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/home/weather_viewmodel.dart';
 import '../../features/rides/ride_viewmodel.dart';
+import '../chatbot/presentation/chatbot_sheet.dart';
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _HomeColors {
@@ -117,7 +118,14 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: _HomeColors.primary,
         tooltip: 'Asistente UniRide',
-        onPressed: null,
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const ChatbotSheet(),
+          );
+        },
         child: const Icon(
           Icons.smart_toy_outlined,
           color: _HomeColors.background,
