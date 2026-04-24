@@ -1,0 +1,41 @@
+import 'package:sqflite/sqflite.dart';
+
+import '../../../data/models/ride_model.dart';
+import '../database_helper.dart';
+import '../entities/ride_entity.dart';
+
+class RideDao {
+  RideDao(this._helper);
+
+  final DatabaseHelper _helper;
+
+  Future<void> insertOrReplaceAll(List<RideModel> rides) async {
+    final db = await _helper.database;
+    final batch = db.batch();
+    for (final ride in rides) {
+      batch.insert(
+        'rides',
+        ride.toDbMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<RideModel>> fetchAll() async {
+    final db = await _helper.database;
+    final rows = await db.query('rides');
+    return rows.map((row) => RideEntityExtension.fromDbMap(row)).toList();
+  }
+
+  Future<int> count() async {
+    final db = await _helper.database;
+    final result = await db.rawQuery('SELECT COUNT(*) as c FROM rides');
+    return (result.first['c'] as int?) ?? 0;
+  }
+
+  Future<void> deleteAll() async {
+    final db = await _helper.database;
+    await db.delete('rides');
+  }
+}

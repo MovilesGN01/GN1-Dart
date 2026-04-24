@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../data/repositories/impl/firebase_ride_repository.dart';
 import '../../data/repositories/ride_repository.dart';
 import '../../data/models/ride_model.dart';
 
@@ -17,6 +18,8 @@ class RideViewModel extends ChangeNotifier {
   String _searchOrigin = '';
   String _searchDestination = '';
 
+  bool isFromCache = false;
+
   List<RideModel> get rides => _rides;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -31,13 +34,28 @@ class RideViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _rides = await _repository.getAvailableRides();
+      final repo = _repository;
+      if (repo is FirebaseRideRepository) {
+        _rides = await repo.getAvailableRidesWithFallback(
+          onCacheStatus: (v) => isFromCache = v,
+        );
+      } else {
+        _rides = await _repository.getAvailableRides();
+      }
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
     }
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> invalidateAndReload() async {
+    final repo = _repository;
+    if (repo is FirebaseRideRepository) {
+      repo.invalidateRideCache();
+    }
+    await loadAvailableRides();
   }
 
   void setSearchTerms(String origin, String destination) {
