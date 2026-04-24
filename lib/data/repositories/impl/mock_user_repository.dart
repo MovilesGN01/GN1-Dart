@@ -36,6 +36,17 @@ class MockUserRepository implements UserRepository {
   }
 
   @override
+  Future<void> registerUser({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+    required String vehiclePlate,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  @override
   Future<int> getQueuePosition(String userId, String rideId) async {
     return 1;
   }
