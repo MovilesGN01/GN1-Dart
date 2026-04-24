@@ -144,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
 
               OutlinedButton(
-                onPressed: () {},
+                onPressed: () => context.go('/register'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _LoginColors.primary,
                   minimumSize: const Size(double.infinity, 52),
