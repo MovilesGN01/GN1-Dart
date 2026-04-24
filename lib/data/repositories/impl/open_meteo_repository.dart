@@ -50,14 +50,14 @@ class OpenMeteoRepository implements WeatherRepository {
   }
 
   static String _descriptionFromCode(int code) {
-    if (code == 0) return 'Sunny';
-    if (code <= 3) return 'Partly Cloudy';
-    if (code == 45 || code == 48) return 'Foggy';
+    if (code == 0) { return 'Sunny'; }
+    if (code <= 3) { return 'Partly Cloudy'; }
+    if (code == 45 || code == 48) { return 'Foggy'; }
     if (code == 51 || code == 53 || code == 55 ||
-        code == 61 || code == 63 || code == 65) return 'Rainy';
-    if (code == 71 || code == 73 || code == 75) return 'Snowy';
-    if (code == 80 || code == 81 || code == 82) return 'Showers';
-    if (code == 95 || code == 96 || code == 99) return 'Stormy';
+        code == 61 || code == 63 || code == 65) { return 'Rainy'; }
+    if (code == 71 || code == 73 || code == 75) { return 'Snowy'; }
+    if (code == 80 || code == 81 || code == 82) { return 'Showers'; }
+    if (code == 95 || code == 96 || code == 99) { return 'Stormy'; }
     return 'Cloudy';
   }
 }

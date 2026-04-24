@@ -99,7 +99,7 @@ class ProfileScreen extends StatelessWidget {
               color: const Color(0xFFEFF4FF),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: const Color(0xFF1F5DFF).withOpacity(0.14),
+                color: const Color(0xFF1F5DFF).withValues(alpha: 0.14),
               ),
             ),
             child: Row(
@@ -158,7 +158,7 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          _sectionCard(
+          _SectionCard(
             title: 'Personal information',
             children: const [
               _InfoRow(label: 'Email', value: 'juan@uniandes.edu.co'),
@@ -169,7 +169,7 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          _sectionCard(
+          _SectionCard(
             title: 'Preferences',
             children: const [
               _InfoRow(label: 'Preferred zone', value: 'Chapinero'),
@@ -180,7 +180,7 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          _sectionCard(
+          _SectionCard(
             title: 'Activity',
             children: const [
               _InfoRow(label: 'Completed rides', value: '12'),
@@ -195,11 +195,11 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _sectionCard extends StatelessWidget {
+class _SectionCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _sectionCard({
+  const _SectionCard({
     required this.title,
     required this.children,
   });
