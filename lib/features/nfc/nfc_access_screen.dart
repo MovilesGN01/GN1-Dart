@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'nfc_service.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 import 'nfc_verification_service.dart';
-import 'package:uniride/features/nfc/nfc_verification_service.dart';
 
 enum _NfcStatus {
   ready,
@@ -25,12 +24,6 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
   final NfcService _service = NfcService();
   final NfcVerificationService _verificationService = NfcVerificationService();
   
-  // Reemplaza estos IDs por tags reales o muévelos a backend / Firestore.
-  final Set<String> _allowedTagIds = {
-    '04AABBCCDD11',
-    '1234567890AB',
-  };
-
   _NfcStatus _status = _NfcStatus.ready;
   String _statusMessage = 'Acerca tu carné o tu celular para validar acceso.';
   NfcScanResult? _lastScan;
@@ -97,7 +90,7 @@ Future<void> _startScan() async {
             decoration: BoxDecoration(
               color: statusData.background,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: statusData.accent.withOpacity(0.18)),
+              border: Border.all(color: statusData.accent.withValues(alpha: 0.18)),
             ),
             child: Row(
               children: [
@@ -197,7 +190,7 @@ Future<void> _startScan() async {
                     backgroundColor: const Color(0xFF1F5DFF),
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        const Color(0xFF1F5DFF).withOpacity(0.45),
+                        const Color(0xFF1F5DFF).withValues(alpha: 0.45),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
