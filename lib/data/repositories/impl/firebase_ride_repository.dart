@@ -1,13 +1,15 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:http/http.dart' as http;
 
-import '../ride_repository.dart';
+import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
+import '../ride_repository.dart';
 
 class FirebaseRideRepository implements RideRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseRideRepository({
+    FirebaseFirestore? firestore,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
 
   @override
   Future<List<RideModel>> getAvailableRides() async {
@@ -37,52 +39,140 @@ class FirebaseRideRepository implements RideRepository {
 
   @override
   Future<List<RideModel>> getMatchingRides(String userId) async {
-    // 1. Query available rides
     final snapshot = await _firestore
         .collection('rides')
         .where('status', isEqualTo: 'available')
         .get();
 
-    List<RideModel> rides = snapshot.docs
+    return snapshot.docs
         .map((doc) => RideModel.fromMap(doc.data(), doc.id))
         .toList();
+  }
 
-    // 2. Filter client-side: driverRating >= 4.5
-    rides = rides.where((ride) => ride.driverRating >= 4.5).toList();
+  @override
+  Future<RideDetailsModel> getRideDetails(String rideId) async {
+    final rideDoc = await _firestore.collection('rides').doc(rideId).get();
 
-    // 3. Fetch weather for Bogotá and flag rainy rides
-    bool hasRain = false;
-    try {
-      final response = await http.get(
-        Uri.parse(
-          'https://api.open-meteo.com/v1/forecast'
-          '?latitude=4.6097&longitude=-74.0817&current_weather=true',
-        ),
-      );
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        final currentWeather =
-            json['current_weather'] as Map<String, dynamic>;
-        final weatherCode = (currentWeather['weathercode'] as num).toInt();
-        hasRain = weatherCode >= 61;
-      }
-    } catch (_) {
-      // Weather fetch failure is non-fatal; hasRain stays false
+    if (!rideDoc.exists || rideDoc.data() == null) {
+      throw Exception('No se encontró el ride.');
     }
 
-    for (final ride in rides) {
-      ride.hasRainForecast = hasRain;
+    final rideData = rideDoc.data()!;
+
+    final rawDriverId = (rideData['driverId'] as String?) ?? '';
+    final driverId = _normalizeDriverId(rawDriverId);
+
+    Map<String, dynamic> driverData = {};
+    if (driverId.isNotEmpty) {
+      final driverDoc = await _firestore.collection('users').doc(driverId).get();
+      if (driverDoc.exists && driverDoc.data() != null) {
+        driverData = driverDoc.data()!;
+      }
     }
 
-    // 4. Sort: rain rides first, then by driverRating descending
-    rides.sort((a, b) {
-      if (a.hasRainForecast != b.hasRainForecast) {
-        return a.hasRainForecast ? -1 : 1;
-      }
-      return b.driverRating.compareTo(a.driverRating);
-    });
+    final departureTime = _readDateTime(rideData['departureTime']) ?? DateTime.now();
+    final estimatedArrivalTime = _readDateTime(rideData['estimatedArrivalTime']);
 
-    return rides;
+    final estimatedDurationMinutes = estimatedArrivalTime != null
+        ? estimatedArrivalTime.difference(departureTime).inMinutes
+        : 0;
+
+    final meetingPoints = ((rideData['meetingPoints'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .where((e) => e.trim().isNotEmpty)
+        .toList();
+
+    final driverName = _firstNonEmpty([
+          rideData['driverName']?.toString(),
+          rideData['name']?.toString(),
+          driverData['driverName']?.toString(),
+          driverData['name']?.toString(),
+        ]) ??
+        'Conductor';
+
+    final driverRating =
+        _readDouble(rideData['driverRating']) ??
+        _readDouble(rideData['reputationScore']) ??
+        _readDouble(driverData['driverRating']) ??
+        _readDouble(driverData['reputationScore']) ??
+        0.0;
+
+    final isFemaleDriver =
+        (rideData['isFemaleDriver'] as bool?) ??
+        ((rideData['gender']?.toString().toLowerCase() == 'female') ||
+            (driverData['gender']?.toString().toLowerCase() == 'female'));
+
+    final vehicleModel = _firstNonEmpty([
+          rideData['vehicleModel']?.toString(),
+          rideData['carModel']?.toString(),
+          driverData['vehicleModel']?.toString(),
+          driverData['carModel']?.toString(),
+        ]) ??
+        '';
+
+    final vehiclePlate = _firstNonEmpty([
+          rideData['vehiclePlate']?.toString(),
+          rideData['plate']?.toString(),
+          driverData['vehiclePlate']?.toString(),
+          driverData['plate']?.toString(),
+        ]) ??
+        '';
+
+    final punctualityRate =
+        _readDouble(rideData['punctualityRate']) ??
+        _readDouble(driverData['punctualityRate']) ??
+        0.0;
+
+    final verified =
+        (rideData['verified'] as bool?) ??
+        (driverData['verified'] as bool?) ??
+        false;
+
+    final badges = <String>[
+      if (verified) 'Verified student',
+      if (driverRating >= 4.7) 'High rating',
+      if (punctualityRate >= 0.9) 'Highly punctual',
+    ];
+
+    final amenities = <String>[
+      if (meetingPoints.length > 1) 'Multiple pickup points',
+    ];
+
+    return RideDetailsModel(
+      id: rideDoc.id,
+      driverId: driverId,
+      driverName: driverName,
+      driverPhotoUrl: '',
+      driverRating: driverRating,
+      isFemaleDriver: isFemaleDriver,
+      origin: (rideData['origin'] as String?) ?? '',
+      destination: (rideData['destination'] as String?) ?? '',
+      departureTime: departureTime,
+      estimatedDurationMinutes: estimatedDurationMinutes,
+      price: _readDouble(rideData['price']) ?? 0.0,
+      seatsAvailable:
+          (rideData['seatsAvailable'] as num?)?.toInt() ??
+          (rideData['seats'] as num?)?.toInt() ??
+          0,
+      status: (rideData['status'] as String?) ?? 'available',
+      zone: (rideData['zone'] as String?) ?? '',
+      pickupAddress: meetingPoints.isNotEmpty ? meetingPoints.first : '',
+      pickupReference: meetingPoints.length > 1
+          ? 'Selecciona uno de los puntos disponibles'
+          : '',
+      vehicleBrand: '',
+      vehicleModel: vehicleModel,
+      vehicleColor: '',
+      vehiclePlate: vehiclePlate,
+      amenities: amenities,
+      badges: badges,
+      notes: meetingPoints.isNotEmpty
+          ? 'Puntos de recogida disponibles: ${meetingPoints.join(', ')}'
+          : '',
+      isReservedByCurrentUser: false,
+      meetingPoints: meetingPoints,
+      selectedMeetingPoint: meetingPoints.isNotEmpty ? meetingPoints.first : null,
+    );
   }
 
   @override
@@ -90,25 +180,65 @@ class FirebaseRideRepository implements RideRepository {
     final rideRef = _firestore.collection('rides').doc(rideId);
 
     await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(rideRef);
-      if (!snapshot.exists) {
-        throw Exception('Ride not found.');
+      final rideSnap = await transaction.get(rideRef);
+
+      if (!rideSnap.exists) {
+        throw Exception('Ride no encontrado.');
       }
 
-      final seats = (snapshot.data()!['seatsAvailable'] as num?)?.toInt() ?? 0;
-      if (seats <= 0) {
-        throw Exception('No seats available.');
+      final data = rideSnap.data()!;
+      final seatsAvailable =
+          (data['seatsAvailable'] as num?)?.toInt() ??
+          (data['seats'] as num?)?.toInt() ??
+          0;
+
+      if (seatsAvailable <= 0) {
+        throw Exception('No hay asientos disponibles.');
       }
 
       transaction.update(rideRef, {
-        'seatsAvailable': FieldValue.increment(-1),
+        'seatsAvailable': seatsAvailable - 1,
+        'seats': seatsAvailable - 1,
       });
 
-      final passengerRef = rideRef.collection('passengers').doc();
-      transaction.set(passengerRef, {
-        'userId': userId,
-        'reservedAt': FieldValue.serverTimestamp(),
-      });
+      if (userId.isNotEmpty) {
+        final passengerRef =
+            rideRef.collection('passengers').doc(userId);
+        transaction.set(passengerRef, {
+          'userId': userId,
+          'reservedAt': FieldValue.serverTimestamp(),
+          'status': 'confirmed',
+        });
+      }
     });
+  }
+
+  String _normalizeDriverId(String raw) {
+    if (raw.isEmpty) return '';
+    if (raw.contains('/')) {
+      final parts = raw.split('/');
+      return parts.where((e) => e.trim().isNotEmpty).last;
+    }
+    return raw;
+  }
+
+  DateTime? _readDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  double? _readDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  String? _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      if (value != null && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
   }
 }

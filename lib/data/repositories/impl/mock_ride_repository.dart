@@ -1,5 +1,6 @@
 // MockImplementation — to be replaced with FirebaseRideRepository in next iteration
 import '../ride_repository.dart';
+import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
 
 class MockRideRepository implements RideRepository {
@@ -61,6 +62,11 @@ class MockRideRepository implements RideRepository {
   Future<List<RideModel>> getMatchingRides(String userId) async {
     await Future.delayed(const Duration(milliseconds: 400));
     return List.from(_rides);
+  }
+
+  @override
+  Future<RideDetailsModel> getRideDetails(String rideId) async {
+    throw UnimplementedError('Use FirebaseRideRepository for ride details.');
   }
 
   @override

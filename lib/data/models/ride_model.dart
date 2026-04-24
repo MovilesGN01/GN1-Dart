@@ -12,6 +12,7 @@ class RideModel {
   final int seatsAvailable;
   final String status;
   final String zone;
+  final bool isFemaleDriver;
   final String gender;
   final double punctualityRate;
   bool hasRainForecast;
@@ -28,26 +29,53 @@ class RideModel {
     required this.seatsAvailable,
     required this.status,
     required this.zone,
+    this.isFemaleDriver = false,
     this.gender = 'male',
     this.punctualityRate = 0.0,
     this.hasRainForecast = false,
   });
 
   factory RideModel.fromMap(Map<String, dynamic> data, String id) {
+    DateTime parseDate(dynamic raw) {
+      if (raw is Timestamp) return raw.toDate();
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+      return DateTime.now();
+    }
+
+    String normalizeDriverId(String raw) {
+      if (raw.isEmpty) return '';
+      if (raw.contains('/')) {
+        final parts = raw.split('/');
+        return parts.where((e) => e.trim().isNotEmpty).last;
+      }
+      return raw;
+    }
+
+    final genderStr = (data['gender'] as String?) ?? 'male';
+    final isFemale = (data['isFemaleDriver'] as bool?) ??
+        (genderStr.toLowerCase() == 'female');
+
     return RideModel(
       id: id,
-      driverId: data['driverId'] as String? ?? '',
-      driverName: data['driverName'] as String? ?? '',
-      driverRating: (data['driverRating'] as num?)?.toDouble() ?? 0.0,
-      origin: data['origin'] as String? ?? '',
-      destination: data['destination'] as String? ?? '',
-      departureTime:
-          (data['departureTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      driverId: normalizeDriverId((data['driverId'] as String?) ?? ''),
+      driverName: (data['driverName'] as String?) ??
+          (data['name'] as String?) ??
+          'Unknown driver',
+      driverRating: (data['driverRating'] as num?)?.toDouble() ??
+          (data['reputationScore'] as num?)?.toDouble() ??
+          0.0,
+      origin: (data['origin'] as String?) ?? '',
+      destination: (data['destination'] as String?) ?? '',
+      departureTime: parseDate(data['departureTime']),
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
-      seatsAvailable: (data['seatsAvailable'] as num?)?.toInt() ?? 0,
-      status: data['status'] as String? ?? 'available',
-      zone: data['zone'] as String? ?? '',
-      gender: data['gender'] as String? ?? 'male',
+      seatsAvailable: (data['seatsAvailable'] as num?)?.toInt() ??
+          (data['seats'] as num?)?.toInt() ??
+          0,
+      status: (data['status'] as String?) ?? 'available',
+      zone: (data['zone'] as String?) ?? '',
+      isFemaleDriver: isFemale,
+      gender: genderStr,
       punctualityRate: (data['punctualityRate'] as num?)?.toDouble() ?? 0.0,
     );
   }
@@ -64,6 +92,7 @@ class RideModel {
     int? seatsAvailable,
     String? status,
     String? zone,
+    bool? isFemaleDriver,
     String? gender,
     double? punctualityRate,
     bool? hasRainForecast,
@@ -80,6 +109,7 @@ class RideModel {
       seatsAvailable: seatsAvailable ?? this.seatsAvailable,
       status: status ?? this.status,
       zone: zone ?? this.zone,
+      isFemaleDriver: isFemaleDriver ?? this.isFemaleDriver,
       gender: gender ?? this.gender,
       punctualityRate: punctualityRate ?? this.punctualityRate,
       hasRainForecast: hasRainForecast ?? this.hasRainForecast,
