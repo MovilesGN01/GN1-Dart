@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/connectivity/connectivity_service.dart';
 import '../../data/repositories/impl/firebase_ride_repository.dart';
 import '../../data/repositories/ride_repository.dart';
 import '../../data/models/ride_model.dart';
@@ -7,7 +8,15 @@ import '../../data/models/ride_model.dart';
 class RideViewModel extends ChangeNotifier {
   final RideRepository _repository;
 
-  RideViewModel(this._repository);
+  RideViewModel(this._repository) {
+    ConnectivityService().onStatusChanged.listen((online) {
+      isOffline = !online;
+      notifyListeners();
+      if (online && isFromCache) {
+        invalidateAndReload();
+      }
+    });
+  }
 
   List<RideModel> _rides = [];
   bool _isLoading = false;
@@ -19,6 +28,7 @@ class RideViewModel extends ChangeNotifier {
   String _searchDestination = '';
 
   bool isFromCache = false;
+  bool isOffline = false;
 
   List<RideModel> get rides => _rides;
   bool get isLoading => _isLoading;
