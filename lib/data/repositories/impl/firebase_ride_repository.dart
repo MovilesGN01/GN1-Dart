@@ -176,7 +176,12 @@ class FirebaseRideRepository implements RideRepository {
   }
 
   @override
-  Future<void> reserveRide(String rideId, String userId) async {
+  Future<void> reserveRide(
+    String rideId,
+    String userId, {
+    String selectedMeetingPoint = '',
+    String pickupReference = '',
+  }) async {
     final rideRef = _firestore.collection('rides').doc(rideId);
 
     await _firestore.runTransaction((transaction) async {
@@ -202,14 +207,40 @@ class FirebaseRideRepository implements RideRepository {
       });
 
       if (userId.isNotEmpty) {
-        final passengerRef =
-            rideRef.collection('passengers').doc(userId);
+        final passengerRef = rideRef.collection('passengers').doc(userId);
         transaction.set(passengerRef, {
           'userId': userId,
           'reservedAt': FieldValue.serverTimestamp(),
           'status': 'confirmed',
         });
       }
+
+      // Create rideRequests document so My Bookings can display it
+      final rawDriverId = (data['driverId'] as String?) ?? '';
+      final driverId = rawDriverId.contains('/')
+          ? rawDriverId.split('/').last
+          : rawDriverId;
+
+      final bookingRef = _firestore.collection('rideRequests').doc();
+      transaction.set(bookingRef, {
+        'rideId': rideId,
+        'passengerId': userId,
+        'driverId': driverId,
+        'driverName': _firstNonEmpty([
+              data['driverName']?.toString(),
+              data['name']?.toString(),
+            ]) ??
+            'Conductor',
+        'origin': (data['origin'] ?? '').toString(),
+        'destination': (data['destination'] ?? '').toString(),
+        'selectedMeetingPoint': selectedMeetingPoint,
+        'pickupReference': pickupReference,
+        'status': 'confirmed',
+        'price': (data['price'] as num?)?.toDouble() ?? 0.0,
+        'seatsReserved': 1,
+        'departureTime': data['departureTime'],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     });
   }
 
