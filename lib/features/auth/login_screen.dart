@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'auth_viewmodel.dart';
+import '../../shared/widgets/offline_banner.dart';
 
 Widget? _limitCounter(
   BuildContext context, {
@@ -58,6 +59,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthViewModel>().checkConnectivity();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -72,11 +83,21 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: _LoginColors.background,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: Column(
+          children: [
+            Consumer<AuthViewModel>(
+              builder: (context, vm, child) => OfflineBanner(
+                isOffline: vm.isOffline,
+                isFromCache: false,
+                messageOverride: 'No connection - Connect to the network',
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
               // Logo
               const _LogoSection(),
 
@@ -176,10 +197,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: const Text('Registrarse'),
               ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-      ),
     );
   }
 }
