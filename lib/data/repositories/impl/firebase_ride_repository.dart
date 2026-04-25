@@ -17,7 +17,8 @@ class FirebaseRideRepository implements RideRepository {
   }
 
   final FirebaseFirestore _firestore;
-  final LRUCache<String, List<RideModel>> _lruCache = LRUCache(capacity: 50);
+  final LRUCache<String, List<RideModel>> _lruCache =
+      LRUCache(capacity: 50);
   late final RideDao _dao;
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -57,8 +58,6 @@ class FirebaseRideRepository implements RideRepository {
   }
 
   /// Online-first with LRU → SQLite fallback.
-  /// [forceRefresh] bypasses LRU.
-  /// [onCacheStatus] receives true when the result came from local cache.
   Future<List<RideModel>> getAvailableRidesWithFallback({
     bool forceRefresh = false,
     void Function(bool isFromCache)? onCacheStatus,
@@ -83,7 +82,7 @@ class FirebaseRideRepository implements RideRepository {
       onCacheStatus?.call(false);
       return rides;
     } catch (e) {
-      debugPrint('[Repo] Firestore failed: $e — falling back to SQLite');
+      debugPrint('[Repo] Firestore failed: $e — fallback SQLite');
       final local = await _dao.fetchAll();
       if (local.isNotEmpty) {
         _lruCache.put(key, local);
@@ -120,103 +119,39 @@ class FirebaseRideRepository implements RideRepository {
 
     final departureTime =
         _readDateTime(rideData['departureTime']) ?? DateTime.now();
-    final estimatedArrivalTime =
-        _readDateTime(rideData['estimatedArrivalTime']);
-    final estimatedDurationMinutes = estimatedArrivalTime != null
-        ? estimatedArrivalTime.difference(departureTime).inMinutes
-        : 0;
-
-    final meetingPoints = ((rideData['meetingPoints'] as List?) ?? const [])
-        .map((e) => e.toString())
-        .where((e) => e.trim().isNotEmpty)
-        .toList();
-
-    final driverName = _firstNonEmpty([
-          rideData['driverName']?.toString(),
-          rideData['name']?.toString(),
-          driverData['driverName']?.toString(),
-          driverData['name']?.toString(),
-        ]) ??
-        'Conductor';
-
-    final driverRating = _readDouble(rideData['driverRating']) ??
-        _readDouble(rideData['reputationScore']) ??
-        _readDouble(driverData['driverRating']) ??
-        _readDouble(driverData['reputationScore']) ??
-        0.0;
-
-    final isFemaleDriver = (rideData['isFemaleDriver'] as bool?) ??
-        ((rideData['gender']?.toString().toLowerCase() == 'female') ||
-            (driverData['gender']?.toString().toLowerCase() == 'female'));
-
-    final vehicleModel = _firstNonEmpty([
-          rideData['vehicleModel']?.toString(),
-          rideData['carModel']?.toString(),
-          driverData['vehicleModel']?.toString(),
-          driverData['carModel']?.toString(),
-        ]) ??
-        '';
-
-    final vehiclePlate = _firstNonEmpty([
-          rideData['vehiclePlate']?.toString(),
-          rideData['plate']?.toString(),
-          driverData['vehiclePlate']?.toString(),
-          driverData['plate']?.toString(),
-        ]) ??
-        '';
-
-    final punctualityRate = _readDouble(rideData['punctualityRate']) ??
-        _readDouble(driverData['punctualityRate']) ??
-        0.0;
-
-    final verified = (rideData['verified'] as bool?) ??
-        (driverData['verified'] as bool?) ??
-        false;
-
-    final badges = <String>[
-      if (verified) 'Verified student',
-      if (driverRating >= 4.7) 'High rating',
-      if (punctualityRate >= 0.9) 'Highly punctual',
-    ];
-
-    final amenities = <String>[
-      if (meetingPoints.length > 1) 'Multiple pickup points',
-    ];
 
     return RideDetailsModel(
       id: rideDoc.id,
       driverId: driverId,
-      driverName: driverName,
+      driverName: _firstNonEmpty([
+            rideData['driverName']?.toString(),
+            rideData['name']?.toString(),
+          ]) ??
+          'Conductor',
       driverPhotoUrl: '',
-      driverRating: driverRating,
-      isFemaleDriver: isFemaleDriver,
+      driverRating: _readDouble(rideData['driverRating']) ?? 0.0,
+      isFemaleDriver: false,
       origin: (rideData['origin'] as String?) ?? '',
       destination: (rideData['destination'] as String?) ?? '',
       departureTime: departureTime,
-      estimatedDurationMinutes: estimatedDurationMinutes,
+      estimatedDurationMinutes: 0,
       price: _readDouble(rideData['price']) ?? 0.0,
-      seatsAvailable: (rideData['seatsAvailable'] as num?)?.toInt() ??
-          (rideData['seats'] as num?)?.toInt() ??
-          0,
+      seatsAvailable:
+          (rideData['seatsAvailable'] as num?)?.toInt() ?? 0,
       status: (rideData['status'] as String?) ?? 'available',
       zone: (rideData['zone'] as String?) ?? '',
-      pickupAddress: meetingPoints.isNotEmpty ? meetingPoints.first : '',
-      pickupReference: meetingPoints.length > 1
-          ? 'Selecciona uno de los puntos disponibles'
-          : '',
+      pickupAddress: '',
+      pickupReference: '',
       vehicleBrand: '',
-      vehicleModel: vehicleModel,
+      vehicleModel: '',
       vehicleColor: '',
-      vehiclePlate: vehiclePlate,
-      amenities: amenities,
-      badges: badges,
-      notes: meetingPoints.isNotEmpty
-          ? 'Puntos de recogida disponibles: ${meetingPoints.join(', ')}'
-          : '',
+      vehiclePlate: '',
+      amenities: const [],
+      badges: const [],
+      notes: '',
       isReservedByCurrentUser: false,
-      meetingPoints: meetingPoints,
-      selectedMeetingPoint:
-          meetingPoints.isNotEmpty ? meetingPoints.first : null,
+      meetingPoints: const [],
+      selectedMeetingPoint: null,
     );
   }
 
@@ -236,9 +171,7 @@ class FirebaseRideRepository implements RideRepository {
 
       final data = rideSnap.data()!;
       final seatsAvailable =
-          (data['seatsAvailable'] as num?)?.toInt() ??
-          (data['seats'] as num?)?.toInt() ??
-          0;
+          (data['seatsAvailable'] as num?)?.toInt() ?? 0;
 
       if (seatsAvailable <= 0) {
         throw Exception('No hay asientos disponibles.');
@@ -246,45 +179,19 @@ class FirebaseRideRepository implements RideRepository {
 
       transaction.update(rideRef, {
         'seatsAvailable': seatsAvailable - 1,
-        'seats': seatsAvailable - 1,
       });
-
-      if (userId.isNotEmpty) {
-        final passengerRef = rideRef.collection('passengers').doc(userId);
-        transaction.set(passengerRef, {
-          'userId': userId,
-          'reservedAt': FieldValue.serverTimestamp(),
-          'status': 'confirmed',
-        });
-      }
-
-      // Create rideRequests document so My Bookings can display it.
-      final rawDriverId = (data['driverId'] as String?) ?? '';
-      final driverId = _normalizeDriverId(rawDriverId);
 
       final bookingRef = _firestore.collection('rideRequests').doc();
       transaction.set(bookingRef, {
         'rideId': rideId,
         'passengerId': userId,
-        'driverId': driverId,
-        'driverName': _firstNonEmpty([
-              data['driverName']?.toString(),
-              data['name']?.toString(),
-            ]) ??
-            'Conductor',
-        'origin': (data['origin'] ?? '').toString(),
-        'destination': (data['destination'] ?? '').toString(),
-        'selectedMeetingPoint': selectedMeetingPoint,
-        'pickupReference': pickupReference,
+        'origin': data['origin'],
+        'destination': data['destination'],
         'status': 'confirmed',
-        'price': (data['price'] as num?)?.toDouble() ?? 0.0,
-        'seatsReserved': 1,
-        'departureTime': data['departureTime'],
         'createdAt': FieldValue.serverTimestamp(),
       });
     });
 
-    // Invalidate ride cache so the next load reflects updated seat count.
     invalidateRideCache();
   }
 
