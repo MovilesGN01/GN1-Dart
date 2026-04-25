@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../../data/models/ride_model.dart';
@@ -37,5 +38,29 @@ class RideDao {
   Future<void> deleteAll() async {
     final db = await _helper.database;
     await db.delete('rides');
+  }
+
+  Future<void> deleteExpiredRides() async {
+    final db = await _helper.database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final deleted = await db.delete(
+      'rides',
+      where: 'departure_time < ?',
+      whereArgs: [nowMs],
+    );
+    debugPrint('[SQLite] deleted $deleted expired rides');
+  }
+
+  Future<void> deleteStaleRides({
+    Duration maxAge = const Duration(hours: 6),
+  }) async {
+    final db = await _helper.database;
+    final cutoff = DateTime.now().subtract(maxAge).millisecondsSinceEpoch;
+    final deleted = await db.delete(
+      'rides',
+      where: 'cached_at < ?',
+      whereArgs: [cutoff],
+    );
+    debugPrint('[SQLite] deleted $deleted stale rides');
   }
 }
