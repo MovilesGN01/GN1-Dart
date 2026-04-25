@@ -123,18 +123,17 @@ class RideDetailsScreen extends StatelessWidget {
                     ),
                     onPressed: canReserve && !vm.isReserving
                         ? () async {
-                            final ok = await context
-                                .read<RideDetailsViewModel>()
-                                .reserve();
+                            final vm = context.read<RideDetailsViewModel>();
+                            final ok = await vm.reserve();
 
                             if (!context.mounted) return;
 
                             if (ok) {
+                              final msg = vm.reservedOffline
+                                  ? 'Reserva guardada. Se sincronizará cuando tengas conexión.'
+                                  : 'Ride reservado con éxito.';
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content:
-                                      Text('Ride reservado con éxito.'),
-                                ),
+                                SnackBar(content: Text(msg)),
                               );
                             }
                           }
