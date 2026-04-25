@@ -1,14 +1,40 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/connectivity/connectivity_service.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/models/user_model.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final UserRepository _repository;
 
-  AuthViewModel(this._repository);
+  AuthViewModel(this._repository) {
+    _setupConnectivityListener();
+  }
+
+  StreamSubscription<bool>? _connectivitySub;
+  bool isOffline = false;
+
+  void _setupConnectivityListener() {
+    _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
+      isOffline = !isOnline;
+      notifyListeners();
+    });
+  }
+
+  Future<void> checkConnectivity() async {
+    isOffline = !(await ConnectivityService().isOnline());
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
 
   bool _isLoading = false;
   String? _errorMessage;

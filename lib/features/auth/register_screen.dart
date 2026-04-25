@@ -1,4 +1,3 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/user_repository.dart';
+import '../../shared/widgets/offline_banner.dart';
 import 'register_viewmodel.dart';
 
 Widget? _limitCounter(
@@ -61,36 +61,14 @@ class _RegisterBodyState extends State<_RegisterBody> {
   bool _passwordVisible = false;
   bool _confirmVisible = false;
 
-  late final Stream<List<ConnectivityResult>> _connectivityStream;
-
   @override
   void initState() {
     super.initState();
-    _connectivityStream = Connectivity().onConnectivityChanged;
-    _checkConnectivity();
-  }
-
-  Future<void> _checkConnectivity() async {
-    final results = await Connectivity().checkConnectivity();
-    final offline = results.contains(ConnectivityResult.none);
-    if (mounted) {
-      context.read<RegisterViewModel>().setOffline(offline);
-      if (offline) _showOfflineSnackBar();
-    }
-  }
-
-  void _showOfflineSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Registration requires an internet connection.',
-          style: GoogleFonts.poppins(color: Colors.white),
-        ),
-        backgroundColor: const Color(0xFF111111),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<RegisterViewModel>().checkConnectivity();
+      }
+    });
   }
 
   @override
@@ -128,30 +106,27 @@ class _RegisterBodyState extends State<_RegisterBody> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<ConnectivityResult>>(
-      stream: _connectivityStream,
-      builder: (context, snapshot) {
-        final results = snapshot.data ?? [];
-        final offline = results.isNotEmpty && results.first == ConnectivityResult.none;
-        final vm = context.read<RegisterViewModel>();
-        if (vm.isOffline != offline) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            vm.setOffline(offline);
-            if (offline) _showOfflineSnackBar();
-          });
-        }
-
-        return Consumer<RegisterViewModel>(
-          builder: (context, vm, _) {
-            return Scaffold(
-              backgroundColor: _Colors.background,
-              resizeToAvoidBottomInset: true,
-              body: SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+    return Consumer<RegisterViewModel>(
+      builder: (context, vm, _) {
+        return Scaffold(
+          backgroundColor: _Colors.background,
+          resizeToAvoidBottomInset: true,
+          body: SafeArea(
+            child: Column(
+              children: [
+                Consumer<RegisterViewModel>(
+                  builder: (context, vm, child) => OfflineBanner(
+                    isOffline: vm.isOffline,
+                    isFromCache: false,
+                    messageOverride: 'No connection - Connect to the network',
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                       const SizedBox(height: 48),
 
                       // Logo
@@ -410,12 +385,13 @@ class _RegisterBodyState extends State<_RegisterBody> {
                         ),
                       ),
                       const SizedBox(height: 32),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
         );
       },
     );
