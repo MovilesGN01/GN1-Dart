@@ -5,16 +5,17 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'core/routes.dart';
+import 'data/models/weather_model.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
 import 'data/repositories/impl/firebase_ride_repository.dart';
 import 'data/repositories/impl/open_meteo_repository.dart';
 import 'data/repositories/user_repository.dart';
 import 'features/auth/auth_viewmodel.dart';
+import 'features/chatbot/data/chatbot_service.dart';
+import 'features/chatbot/state/chatbot_controller.dart';
 import 'features/home/weather_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
 import 'firebase_options.dart';
-import 'features/chatbot/data/chatbot_service.dart';
-import 'features/chatbot/state/chatbot_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,13 @@ Future<void> main() async {
   // (aligned with develop branch strategy).
   FirebaseFirestore.instance.settings =
       const Settings(persistenceEnabled: false);
+
+  // Fire-and-forget weather prefetch at boot.
+  OpenMeteoRepository().fetchCurrentWithCallback(
+    onSuccess: (WeatherData data) =>
+        debugPrint('[Boot] weather prefetch: ${data.temperature}°C'),
+    onError: (e) => debugPrint('[Boot] weather prefetch failed: $e'),
+  );
 
   runApp(const UniRideBootstrap());
 }

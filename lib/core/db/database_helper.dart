@@ -49,6 +49,6 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // future migrations go here
+    // Future migrations go here.
   }
 }
