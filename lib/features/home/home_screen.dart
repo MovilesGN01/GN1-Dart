@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 import 'package:uniride/shared/widgets/location_disabled_banner.dart';
+import 'package:uniride/shared/widgets/offline_banner.dart';
 
 import '../../core/db/daos/ride_dao.dart';
 import '../../core/db/database_helper.dart';
@@ -137,8 +138,17 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
-      body: SafeArea(
-        child: SingleChildScrollView(
+      body: Column(
+        children: [
+          Consumer<RideViewModel>(
+            builder: (_, vm, _) => OfflineBanner(
+              isOffline: vm.isOffline,
+              isFromCache: vm.isFromCache,
+            ),
+          ),
+          Expanded(
+            child: SafeArea(
+              child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -226,6 +236,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+          ),
+        ],
       ),
     );
   }
