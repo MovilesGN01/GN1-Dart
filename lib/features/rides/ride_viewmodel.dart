@@ -1,21 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../../core/connectivity_service.dart';
+import '../../data/repositories/impl/firebase_ride_repository.dart';
 import '../../data/repositories/ride_repository.dart';
 import '../../data/models/ride_model.dart';
 
 class RideViewModel extends ChangeNotifier {
-  final RideRepository _repository;
+  RideViewModel(this._repository) {
+    _setupConnectivityListener();
+  }
 
-  RideViewModel(this._repository);
+  final RideRepository _repository;
+  StreamSubscription<bool>? _connectivitySub;
 
   List<RideModel> _rides = [];
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Search state (Feature 3 / Feature 5)
   bool _isSearchMode = false;
   String _searchOrigin = '';
   String _searchDestination = '';
+
+  bool isFromCache = false;
+  bool isOffline = false;
 
   List<RideModel> get rides => _rides;
   bool get isLoading => _isLoading;
@@ -24,6 +33,26 @@ class RideViewModel extends ChangeNotifier {
   String get searchOrigin => _searchOrigin;
   String get searchDestination => _searchDestination;
 
+  void _setupConnectivityListener() {
+    _connectivitySub =
+        ConnectivityService().onStatusChanged.listen((online) {
+      final wasOffline = isOffline;
+      isOffline = !online;
+      notifyListeners();
+
+      if (online && (wasOffline || isFromCache)) {
+        debugPrint('[RideVM] back online — reloading rides');
+        invalidateAndReload();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
+
   Future<void> loadAvailableRides() async {
     _isLoading = true;
     _isSearchMode = false;
@@ -31,13 +60,31 @@ class RideViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _rides = await _repository.getAvailableRides();
+      final repo = _repository;
+      if (repo is FirebaseRideRepository) {
+        _rides = await repo.getAvailableRidesWithFallback(
+          onCacheStatus: (fromCache) {
+            isFromCache = fromCache;
+            isOffline = fromCache;
+          },
+        );
+      } else {
+        _rides = await _repository.getAvailableRides();
+      }
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
     }
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> invalidateAndReload() async {
+    final repo = _repository;
+    if (repo is FirebaseRideRepository) {
+      repo.invalidateRideCache();
+    }
+    await loadAvailableRides();
   }
 
   void setSearchTerms(String origin, String destination) {

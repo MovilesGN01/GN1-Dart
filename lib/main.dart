@@ -23,10 +23,10 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  // Disable Firestore's built-in persistence: the app uses SQLite + LRU instead
+  // (aligned with develop branch strategy).
+  FirebaseFirestore.instance.settings =
+      const Settings(persistenceEnabled: false);
 
   runApp(const UniRideBootstrap());
 }

@@ -1,15 +1,26 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../../core/cache/lru_cache.dart';
+import '../../../core/db/daos/ride_dao.dart';
+import '../../../core/db/database_helper.dart';
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
 import '../ride_repository.dart';
 
 class FirebaseRideRepository implements RideRepository {
-  FirebaseRideRepository({
-    FirebaseFirestore? firestore,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+  FirebaseRideRepository({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance {
+    _dao = RideDao(DatabaseHelper());
+  }
 
   final FirebaseFirestore _firestore;
+  final LRUCache<String, List<RideModel>> _lruCache = LRUCache(capacity: 50);
+  late final RideDao _dao;
+
+  // ── Public API ────────────────────────────────────────────────────────────
 
   @override
   Future<List<RideModel>> getAvailableRides() async {
@@ -23,16 +34,12 @@ class FirebaseRideRepository implements RideRepository {
         try {
           return RideModel.fromMap(doc.data(), doc.id);
         } catch (e) {
-          // ignore: avoid_print
-          print('ERROR mapping doc ${doc.id}: $e');
-          // ignore: avoid_print
-          print('Doc data: ${doc.data()}');
+          debugPrint('ERROR mapping doc ${doc.id}: $e');
           rethrow;
         }
       }).toList();
     } catch (e) {
-      // ignore: avoid_print
-      print('ERROR in getAvailableRides: $e');
+      debugPrint('ERROR in getAvailableRides: $e');
       rethrow;
     }
   }
@@ -49,6 +56,47 @@ class FirebaseRideRepository implements RideRepository {
         .toList();
   }
 
+  /// Online-first with LRU → SQLite fallback.
+  /// [forceRefresh] bypasses LRU.
+  /// [onCacheStatus] receives true when the result came from local cache.
+  Future<List<RideModel>> getAvailableRidesWithFallback({
+    bool forceRefresh = false,
+    void Function(bool isFromCache)? onCacheStatus,
+  }) async {
+    unawaited(_dao.deleteExpiredRides());
+    const key = 'available_rides';
+
+    if (!forceRefresh) {
+      final cached = _lruCache.get(key);
+      if (cached != null) {
+        debugPrint('[LRU] hit — ${cached.length} rides');
+        onCacheStatus?.call(false);
+        return cached;
+      }
+    }
+
+    try {
+      final rides = await getAvailableRides();
+      _lruCache.put(key, rides);
+      unawaited(_dao.insertOrReplaceAll(rides));
+      debugPrint('[Repo] Firestore ok — ${rides.length} rides');
+      onCacheStatus?.call(false);
+      return rides;
+    } catch (e) {
+      debugPrint('[Repo] Firestore failed: $e — falling back to SQLite');
+      final local = await _dao.fetchAll();
+      if (local.isNotEmpty) {
+        _lruCache.put(key, local);
+        debugPrint('[SQLite] fallback — ${local.length} rides');
+        onCacheStatus?.call(true);
+        return local;
+      }
+      rethrow;
+    }
+  }
+
+  void invalidateRideCache() => _lruCache.invalidateAll();
+
   @override
   Future<RideDetailsModel> getRideDetails(String rideId) async {
     final rideDoc = await _firestore.collection('rides').doc(rideId).get();
@@ -58,21 +106,22 @@ class FirebaseRideRepository implements RideRepository {
     }
 
     final rideData = rideDoc.data()!;
-
     final rawDriverId = (rideData['driverId'] as String?) ?? '';
     final driverId = _normalizeDriverId(rawDriverId);
 
     Map<String, dynamic> driverData = {};
     if (driverId.isNotEmpty) {
-      final driverDoc = await _firestore.collection('users').doc(driverId).get();
+      final driverDoc =
+          await _firestore.collection('users').doc(driverId).get();
       if (driverDoc.exists && driverDoc.data() != null) {
         driverData = driverDoc.data()!;
       }
     }
 
-    final departureTime = _readDateTime(rideData['departureTime']) ?? DateTime.now();
-    final estimatedArrivalTime = _readDateTime(rideData['estimatedArrivalTime']);
-
+    final departureTime =
+        _readDateTime(rideData['departureTime']) ?? DateTime.now();
+    final estimatedArrivalTime =
+        _readDateTime(rideData['estimatedArrivalTime']);
     final estimatedDurationMinutes = estimatedArrivalTime != null
         ? estimatedArrivalTime.difference(departureTime).inMinutes
         : 0;
@@ -90,15 +139,13 @@ class FirebaseRideRepository implements RideRepository {
         ]) ??
         'Conductor';
 
-    final driverRating =
-        _readDouble(rideData['driverRating']) ??
+    final driverRating = _readDouble(rideData['driverRating']) ??
         _readDouble(rideData['reputationScore']) ??
         _readDouble(driverData['driverRating']) ??
         _readDouble(driverData['reputationScore']) ??
         0.0;
 
-    final isFemaleDriver =
-        (rideData['isFemaleDriver'] as bool?) ??
+    final isFemaleDriver = (rideData['isFemaleDriver'] as bool?) ??
         ((rideData['gender']?.toString().toLowerCase() == 'female') ||
             (driverData['gender']?.toString().toLowerCase() == 'female'));
 
@@ -118,13 +165,11 @@ class FirebaseRideRepository implements RideRepository {
         ]) ??
         '';
 
-    final punctualityRate =
-        _readDouble(rideData['punctualityRate']) ??
+    final punctualityRate = _readDouble(rideData['punctualityRate']) ??
         _readDouble(driverData['punctualityRate']) ??
         0.0;
 
-    final verified =
-        (rideData['verified'] as bool?) ??
+    final verified = (rideData['verified'] as bool?) ??
         (driverData['verified'] as bool?) ??
         false;
 
@@ -150,8 +195,7 @@ class FirebaseRideRepository implements RideRepository {
       departureTime: departureTime,
       estimatedDurationMinutes: estimatedDurationMinutes,
       price: _readDouble(rideData['price']) ?? 0.0,
-      seatsAvailable:
-          (rideData['seatsAvailable'] as num?)?.toInt() ??
+      seatsAvailable: (rideData['seatsAvailable'] as num?)?.toInt() ??
           (rideData['seats'] as num?)?.toInt() ??
           0,
       status: (rideData['status'] as String?) ?? 'available',
@@ -171,7 +215,8 @@ class FirebaseRideRepository implements RideRepository {
           : '',
       isReservedByCurrentUser: false,
       meetingPoints: meetingPoints,
-      selectedMeetingPoint: meetingPoints.isNotEmpty ? meetingPoints.first : null,
+      selectedMeetingPoint:
+          meetingPoints.isNotEmpty ? meetingPoints.first : null,
     );
   }
 
@@ -187,9 +232,7 @@ class FirebaseRideRepository implements RideRepository {
     await _firestore.runTransaction((transaction) async {
       final rideSnap = await transaction.get(rideRef);
 
-      if (!rideSnap.exists) {
-        throw Exception('Ride no encontrado.');
-      }
+      if (!rideSnap.exists) throw Exception('Ride no encontrado.');
 
       final data = rideSnap.data()!;
       final seatsAvailable =
@@ -215,11 +258,9 @@ class FirebaseRideRepository implements RideRepository {
         });
       }
 
-      // Create rideRequests document so My Bookings can display it
+      // Create rideRequests document so My Bookings can display it.
       final rawDriverId = (data['driverId'] as String?) ?? '';
-      final driverId = rawDriverId.contains('/')
-          ? rawDriverId.split('/').last
-          : rawDriverId;
+      final driverId = _normalizeDriverId(rawDriverId);
 
       final bookingRef = _firestore.collection('rideRequests').doc();
       transaction.set(bookingRef, {
@@ -242,13 +283,17 @@ class FirebaseRideRepository implements RideRepository {
         'createdAt': FieldValue.serverTimestamp(),
       });
     });
+
+    // Invalidate ride cache so the next load reflects updated seat count.
+    invalidateRideCache();
   }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
 
   String _normalizeDriverId(String raw) {
     if (raw.isEmpty) return '';
     if (raw.contains('/')) {
-      final parts = raw.split('/');
-      return parts.where((e) => e.trim().isNotEmpty).last;
+      return raw.split('/').where((e) => e.trim().isNotEmpty).last;
     }
     return raw;
   }

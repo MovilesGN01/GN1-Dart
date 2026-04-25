@@ -277,6 +277,9 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_locationServiceDisabled) const LocationDisabledBanner(),
+              if (vm.isOffline) const _CacheOfflineBanner(isOffline: true),
+              if (!vm.isOffline && vm.isFromCache)
+                const _CacheOfflineBanner(isOffline: false),
               _buildSearchSummaryCard(),
               _FilterChipsRow(
                 activeFilter: _activeFilter,
@@ -925,6 +928,48 @@ class _RideCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Cache / offline banner ────────────────────────────────────────────────────
+
+class _CacheOfflineBanner extends StatelessWidget {
+  const _CacheOfflineBanner({required this.isOffline});
+
+  final bool isOffline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: isOffline ? const Color(0xFFFEF3C7) : const Color(0xFFEFF6FF),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      child: Row(
+        children: [
+          Icon(
+            isOffline ? Icons.wifi_off : Icons.history,
+            size: 15,
+            color: isOffline
+                ? const Color(0xFF92400E)
+                : const Color(0xFF1D4ED8),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isOffline
+                  ? 'Sin conexión — mostrando rides en caché'
+                  : 'Mostrando rides desde caché local',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: isOffline
+                    ? const Color(0xFF92400E)
+                    : const Color(0xFF1D4ED8),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
