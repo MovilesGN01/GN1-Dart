@@ -7,9 +7,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 import 'package:uniride/shared/widgets/location_disabled_banner.dart';
+import 'package:uniride/shared/widgets/offline_banner.dart';
 
+import '../../core/connectivity/connectivity_service.dart';
+import '../../core/db/daos/ride_dao.dart';
+import '../../core/db/database_helper.dart';
 import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
+import '../../data/models/weather_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/home/weather_viewmodel.dart';
 import '../../features/rides/ride_viewmodel.dart';
@@ -88,9 +93,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<RideViewModel>().loadAvailableRides();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(RideDao(DatabaseHelper()).deleteExpiredRides());
+      unawaited(RideDao(DatabaseHelper()).deleteStaleRides(
+          maxAge: const Duration(hours: 6)));
+      context.read<RideViewModel>().loadAvailableRides();
       context.read<WeatherViewModel>().loadWeather();
+      context.read<WeatherViewModel>().startAutoRefresh();
       context.read<AuthViewModel>().loadRecurringRoutes();
     });
   }
@@ -137,6 +146,14 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Offline / cache banner — inside SafeArea so it clears the status bar
+              Consumer<RideViewModel>(
+                builder: (_, vm, _) => OfflineBanner(
+                  isOffline: vm.isOffline,
+                  isFromCache: vm.isFromCache,
+                ),
+              ),
+
               // Header
               _HomeHeader(firstName: firstName, initial: initial),
               const SizedBox(height: 8),
@@ -401,6 +418,8 @@ class _SearchCardState extends State<_SearchCard> {
   bool _gpsAutoFilled = false;
   bool _locationServiceDisabled = false;
   StreamSubscription<ServiceStatus>? _locationServiceStream;
+  StreamSubscription<bool>? _connectivitySub;
+  Timer? _locationRefreshTimer;
 
   static const _timeOptions = ['Now', 'In 30 min', 'In 1 hour', 'In 2 hours'];
 
@@ -411,6 +430,8 @@ class _SearchCardState extends State<_SearchCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _tryAutoFillLocation();
+
+      // Re-trigger GPS when GPS service toggles
       _locationServiceStream = Geolocator.getServiceStatusStream().listen(
         (ServiceStatus status) {
           if (!mounted) return;
@@ -422,6 +443,22 @@ class _SearchCardState extends State<_SearchCard> {
           }
         },
       );
+
+      // Re-trigger GPS when network comes back (airplane mode fix)
+      _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
+        if (isOnline && mounted) {
+          debugPrint('[GPS] connectivity restored — retrying location');
+          _tryAutoFillLocation();
+        }
+      });
+
+      // Refresh location every 5 minutes while on this screen
+      _locationRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+        if (mounted) {
+          debugPrint('[GPS] periodic refresh triggered');
+          _tryAutoFillLocation();
+        }
+      });
     });
   }
 
@@ -430,7 +467,8 @@ class _SearchCardState extends State<_SearchCard> {
   }
 
   Future<void> _tryAutoFillLocation() async {
-    if (_fromController.text.isNotEmpty) return;
+    // Allow fill if field is empty OR was GPS-filled (not manually typed)
+    if (_fromController.text.isNotEmpty && !_gpsAutoFilled) return;
     final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) setState(() => _locationServiceDisabled = true);
@@ -438,15 +476,18 @@ class _SearchCardState extends State<_SearchCard> {
     }
     if (mounted) setState(() => _locationServiceDisabled = false);
     final zone = await LocationUtils.detectZone();
-    if (zone != null && mounted && _fromController.text.isEmpty) {
+    if (zone != null && mounted) {
       _fromController.text = zone;
       setState(() => _gpsAutoFilled = true);
+      debugPrint('[GPS] auto-filled: $zone');
     }
   }
 
   @override
   void dispose() {
     _locationServiceStream?.cancel();
+    _connectivitySub?.cancel();
+    _locationRefreshTimer?.cancel();
     _fromController.removeListener(_onFromChanged);
     _fromController.dispose();
     _toController.dispose();
@@ -818,69 +859,70 @@ class _WeatherChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final weather = context.watch<WeatherViewModel>().weather;
+    return StreamBuilder<WeatherData>(
+      stream: context.read<WeatherViewModel>().weatherStream,
+      initialData: context.read<WeatherViewModel>().weather,
+      builder: (context, snapshot) {
+        final weather = snapshot.data;
 
-    // Manejo de estado cuando el clima aún no carga
-    if (weather == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
-        ),
-        child: const Text('--', style: TextStyle(fontSize: 11)),
-      );
-    }
-
-    return Container(
-      // Reducimos un poco el ancho máximo ya que ahora es vertical
-      constraints: const BoxConstraints(maxWidth: 110),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12), // Un borde un poco menos redondo queda mejor con columnas
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Agrandé un poquitico el icono para que balancee con las dos líneas de texto
-          const Icon(Icons.wb_sunny, size: 16, color: Colors.orange),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Línea 1: Temperatura
-                Text(
-                  '${weather.temperature.toStringAsFixed(0)}°C',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700, // Un poco más gordita para destacar
-                    height: 1.1, // Reduce el salto de línea para que se vean unidos
-                  ),
-                ),
-                // Línea 2: Descripción
-                Text(
-                  weather.description,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF555555), // Un gris sutil
-                    height: 1.1,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+        if (weather == null) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
             ),
+            child: const Text('--', style: TextStyle(fontSize: 11)),
+          );
+        }
+
+        return Container(
+          constraints: const BoxConstraints(maxWidth: 110),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(color: Colors.black12, blurRadius: 4),
+            ],
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.wb_sunny, size: 16, color: Colors.orange),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${weather.temperature.toStringAsFixed(0)}°C',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.1,
+                      ),
+                    ),
+                    Text(
+                      weather.description,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF555555),
+                        height: 1.1,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

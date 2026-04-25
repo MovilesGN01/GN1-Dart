@@ -16,37 +16,37 @@ class OpenMeteoRepository implements WeatherRepository {
 
   @override
   Future<WeatherData> getCurrentWeather() async {
-    try {
-      final response = await http.get(Uri.parse(_url));
-      if (response.statusCode != 200) return WeatherData.defaultData;
-
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final currentWeather = json['current_weather'] as Map<String, dynamic>;
-      final hourly = json['hourly'] as Map<String, dynamic>;
-
-      final temperature =
-          (currentWeather['temperature'] as num).toDouble();
-      final weatherCode =
-          (currentWeather['weathercode'] as num).toInt();
-
-      // Fix 1 — Null-safe precipitation parsing
-      final rawList = (hourly['precipitation_probability'] as List?) ?? [];
-      final precipList =
-          rawList.map((v) => v == null ? 0 : (v as num).toInt()).toList();
-
-      // Precipitation probability for the next hour only
-      final maxPrecip = precipList.isEmpty ? 0 : precipList.first;
-
-      return WeatherData(
-        temperature: temperature,
-        description: _descriptionFromCode(weatherCode),
-        precipitationProbability: maxPrecip,
-        willRainSoon: maxPrecip >= 10,
-        weatherCode: weatherCode,
-      );
-    } catch (_) {
-      return WeatherData.defaultData;
+    final response = await http.get(Uri.parse(_url));
+    if (response.statusCode != 200) {
+      throw Exception('Weather API error: ${response.statusCode}');
     }
+
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final currentWeather = json['current_weather'] as Map<String, dynamic>;
+    final hourly = json['hourly'] as Map<String, dynamic>;
+
+    final temperature = (currentWeather['temperature'] as num).toDouble();
+    final weatherCode = (currentWeather['weathercode'] as num).toInt();
+
+    final rawList = (hourly['precipitation_probability'] as List?) ?? [];
+    final precipList =
+        rawList.map((v) => v == null ? 0 : (v as num).toInt()).toList();
+    final maxPrecip = precipList.isEmpty ? 0 : precipList.first;
+
+    return WeatherData(
+      temperature: temperature,
+      description: _descriptionFromCode(weatherCode),
+      precipitationProbability: maxPrecip,
+      willRainSoon: maxPrecip >= 10,
+      weatherCode: weatherCode,
+    );
+  }
+
+  void fetchCurrentWithCallback({
+    required void Function(WeatherData) onSuccess,
+    required void Function(Object) onError,
+  }) {
+    getCurrentWeather().then(onSuccess).catchError(onError);
   }
 
   static String _descriptionFromCode(int code) {
