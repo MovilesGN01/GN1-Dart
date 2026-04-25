@@ -5,17 +5,19 @@ class OfflineBanner extends StatelessWidget {
     super.key,
     required this.isOffline,
     required this.isFromCache,
+    this.messageOverride,
   });
 
   final bool isOffline;
   final bool isFromCache;
+  final String? messageOverride;
 
   @override
   Widget build(BuildContext context) {
     if (!isOffline && !isFromCache) return const SizedBox.shrink();
 
     final message = isOffline
-        ? 'No connection — showing saved data'
+        ? (messageOverride ?? 'No connection — showing saved data')
         : 'Cached data — refreshing...';
 
     final bgColor = isOffline
