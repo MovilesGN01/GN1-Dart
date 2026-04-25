@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 import 'package:uniride/shared/widgets/location_disabled_banner.dart';
 
+import '../../core/db/daos/ride_dao.dart';
+import '../../core/db/database_helper.dart';
 import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
@@ -88,6 +90,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(RideDao(DatabaseHelper()).deleteExpiredRides());
+    unawaited(RideDao(DatabaseHelper()).deleteStaleRides(maxAge: const Duration(hours: 6)));
     context.read<RideViewModel>().loadAvailableRides();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<WeatherViewModel>().loadWeather();

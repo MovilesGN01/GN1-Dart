@@ -227,6 +227,7 @@ class FirebaseRideRepository implements RideRepository {
     bool forceRefresh = false,
     void Function(bool isFromCache)? onCacheStatus,
   }) async {
+    unawaited(_dao.deleteExpiredRides());
     const key = 'available_rides';
 
     if (!forceRefresh) {
