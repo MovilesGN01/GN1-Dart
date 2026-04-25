@@ -90,10 +90,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(RideDao(DatabaseHelper()).deleteExpiredRides());
-    unawaited(RideDao(DatabaseHelper()).deleteStaleRides(maxAge: const Duration(hours: 6)));
-    context.read<RideViewModel>().loadAvailableRides();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(RideDao(DatabaseHelper()).deleteExpiredRides());
+      unawaited(RideDao(DatabaseHelper()).deleteStaleRides(
+          maxAge: const Duration(hours: 6)));
+      context.read<RideViewModel>().loadAvailableRides();
       context.read<WeatherViewModel>().loadWeather();
       context.read<AuthViewModel>().loadRecurringRoutes();
     });
