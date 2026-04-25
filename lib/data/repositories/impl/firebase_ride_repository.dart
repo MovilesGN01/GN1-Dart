@@ -1,5 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../../core/cache/lru_cache.dart';
+import '../../../core/db/daos/ride_dao.dart';
+import '../../../core/db/database_helper.dart';
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
 import '../ride_repository.dart';
@@ -7,9 +13,13 @@ import '../ride_repository.dart';
 class FirebaseRideRepository implements RideRepository {
   FirebaseRideRepository({
     FirebaseFirestore? firestore,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+  }) : _firestore = firestore ?? FirebaseFirestore.instance {
+    _dao = RideDao(DatabaseHelper());
+  }
 
   final FirebaseFirestore _firestore;
+  final LRUCache<String, List<RideModel>> _lruCache = LRUCache(capacity: 50);
+  late final RideDao _dao;
 
   @override
   Future<List<RideModel>> getAvailableRides() async {
@@ -211,6 +221,46 @@ class FirebaseRideRepository implements RideRepository {
         });
       }
     });
+  }
+
+  Future<List<RideModel>> getAvailableRidesWithFallback({
+    bool forceRefresh = false,
+    void Function(bool isFromCache)? onCacheStatus,
+  }) async {
+    unawaited(_dao.deleteExpiredRides());
+    const key = 'available_rides';
+
+    if (!forceRefresh) {
+      final cached = _lruCache.get(key);
+      if (cached != null) {
+        debugPrint('[LRU] hit — ${cached.length} rides');
+        onCacheStatus?.call(false); // LRU = RAM, fresh session data, no banner
+        return cached;
+      }
+    }
+
+    try {
+      final rides = await getAvailableRides();
+      _lruCache.put(key, rides);
+      unawaited(_dao.insertOrReplaceAll(rides));
+      debugPrint('[Repo] Firestore ok — ${rides.length}');
+      onCacheStatus?.call(false);
+      return rides;
+    } catch (e) {
+      debugPrint('[Repo] Firestore failed: $e');
+      final local = await _dao.fetchAll();
+      if (local.isNotEmpty) {
+        _lruCache.put(key, local);
+        debugPrint('[SQLite] fallback — ${local.length}');
+        onCacheStatus?.call(true);
+        return local;
+      }
+      rethrow;
+    }
+  }
+
+  void invalidateRideCache() {
+    _lruCache.invalidateAll();
   }
 
   String _normalizeDriverId(String raw) {

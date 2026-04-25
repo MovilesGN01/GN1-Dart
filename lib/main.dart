@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +8,7 @@ import 'core/routes.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
 import 'data/repositories/impl/firebase_ride_repository.dart';
 import 'data/repositories/impl/open_meteo_repository.dart';
+import 'data/models/weather_model.dart';
 import 'data/repositories/user_repository.dart';
 import 'features/auth/auth_viewmodel.dart';
 import 'features/home/weather_viewmodel.dart';
@@ -20,6 +22,16 @@ Future<void> main() async {
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  FirebaseFirestore.instance.settings =
+      const Settings(persistenceEnabled: false);
+
+  // Future + callback — fire-and-forget weather prefetch at boot
+  OpenMeteoRepository().fetchCurrentWithCallback(
+    onSuccess: (WeatherData data) =>
+        debugPrint('[Boot] weather prefetch: ${data.temperature}°C'),
+    onError: (e) => debugPrint('[Boot] weather prefetch failed: $e'),
   );
 
   runApp(const UniRideBootstrap());
