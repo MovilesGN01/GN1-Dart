@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/connectivity/connectivity_service.dart';
@@ -9,13 +11,32 @@ class RideViewModel extends ChangeNotifier {
   final RideRepository _repository;
 
   RideViewModel(this._repository) {
-    ConnectivityService().onStatusChanged.listen((online) {
-      isOffline = !online;
+    _setupConnectivityListener();
+  }
+
+  StreamSubscription<bool>? _connectivitySub;
+
+  void _setupConnectivityListener() {
+    _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
+      final wasOffline = isOffline;
+      debugPrint('[Connectivity] online=$isOnline '
+          'wasOffline=$wasOffline isFromCache=$isFromCache');
+      isOffline = !isOnline;
       notifyListeners();
-      if (online && isFromCache) {
+      if (isOnline && (wasOffline || isFromCache)) {
+        debugPrint('[Connectivity] triggering reload '
+            '(wasOffline=$wasOffline isFromCache=$isFromCache)');
         invalidateAndReload();
+      } else if (isOnline) {
+        debugPrint('[Connectivity] online, no reload needed');
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 
   List<RideModel> _rides = [];
@@ -47,7 +68,10 @@ class RideViewModel extends ChangeNotifier {
       final repo = _repository;
       if (repo is FirebaseRideRepository) {
         _rides = await repo.getAvailableRidesWithFallback(
-          onCacheStatus: (v) => isFromCache = v,
+          onCacheStatus: (v) {
+            isFromCache = v;
+            debugPrint('[RideVM] isFromCache set to $v');
+          },
         );
       } else {
         _rides = await _repository.getAvailableRides();
@@ -61,11 +85,13 @@ class RideViewModel extends ChangeNotifier {
   }
 
   Future<void> invalidateAndReload() async {
+    debugPrint('[RideVM] invalidateAndReload started');
     final repo = _repository;
     if (repo is FirebaseRideRepository) {
       repo.invalidateRideCache();
     }
     await loadAvailableRides();
+    debugPrint('[RideVM] invalidateAndReload done, isFromCache=$isFromCache');
   }
 
   void setSearchTerms(String origin, String destination) {

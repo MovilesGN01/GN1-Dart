@@ -234,7 +234,7 @@ class FirebaseRideRepository implements RideRepository {
       final cached = _lruCache.get(key);
       if (cached != null) {
         debugPrint('[LRU] hit — ${cached.length} rides');
-        onCacheStatus?.call(true);
+        onCacheStatus?.call(false); // LRU = RAM, fresh session data, no banner
         return cached;
       }
     }
