@@ -190,7 +190,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: const UniRideBottomNav(currentIndex: 3),
+      bottomNavigationBar: const UniRideBottomNav(currentIndex: 4),
     );
   }
 }

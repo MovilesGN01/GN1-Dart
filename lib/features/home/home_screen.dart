@@ -13,6 +13,7 @@ import '../../core/connectivity/connectivity_service.dart';
 import '../../core/db/daos/ride_dao.dart';
 import '../../core/db/database_helper.dart';
 import '../../core/location_utils.dart';
+import '../../core/utils/geocoding_service.dart';
 import '../../data/models/ride_model.dart';
 import '../../data/models/weather_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
@@ -88,7 +89,24 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _showWeatherBanner = true;
+  bool _weatherBannerDismissed = false;
+  final GlobalKey<_SearchCardState> _searchCardKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
+
+  void _onRecurringRideTap(String origin, String destination) {
+    _searchCardKey.currentState?.fillRoute(origin, destination);
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -108,12 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final rideVm = context.watch<RideViewModel>();
     final authVm = context.watch<AuthViewModel>();
-    final weatherVm = context.watch<WeatherViewModel>();
 
     final String firstName = authVm.currentUser?.name.split(' ').first ?? 'there';
-    final String initial = authVm.currentUser?.name.isNotEmpty == true
-        ? authVm.currentUser!.name[0].toUpperCase()
-        : '?';
 
     final now = DateTime.now();
     final upcomingRides = rideVm.rides.where((r) =>
@@ -143,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
       body: SafeArea(
         child: SingleChildScrollView(
+          controller: _scrollController,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -155,23 +170,35 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               // Header
-              _HomeHeader(firstName: firstName, initial: initial),
+              _HomeHeader(firstName: firstName),
               const SizedBox(height: 8),
 
-              // Weather banner (conditional — only when rides are available and rain is expected)
-              if (_showWeatherBanner &&
-                  (weatherVm.weather?.willRainSoon ?? false) &&
-                  !rideVm.isLoading &&
-                  rideVm.rides.isNotEmpty) ...[
-                _WeatherBanner(
-                  onDismiss: () =>
-                      setState(() => _showWeatherBanner = false),
-                ),
-                const SizedBox(height: 8),
-              ],
+              // Weather banner — driven directly by WeatherViewModel, not local state
+              Consumer<WeatherViewModel>(
+                builder: (_, vm, _) {
+                  final weather = vm.weather;
+                  debugPrint('[Banner] weather=${weather?.willRainSoon} '
+                      'precip=${weather?.precipitationProbability} '
+                      'dismissed=$_weatherBannerDismissed');
+                  if (weather == null ||
+                      !weather.willRainSoon ||
+                      _weatherBannerDismissed) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: [
+                      _WeatherBanner(
+                        onDismiss: () => setState(
+                            () => _weatherBannerDismissed = true),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  );
+                },
+              ),
 
               // Search card
-              const _SearchCard(),
+              _SearchCard(key: _searchCardKey),
               const SizedBox(height: 16),
 
               // Explore alternatives
@@ -233,7 +260,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
 
               // Recurring rides
-              _RecurringRidesSection(routes: authVm.recurringRoutes),
+              _RecurringRidesSection(
+                routes: authVm.recurringRoutes,
+                onRouteTap: _onRecurringRideTap,
+              ),
               const SizedBox(height: 24),
             ],
           ),
@@ -246,10 +276,9 @@ class _HomeScreenState extends State<HomeScreen> {
 // ── Private widgets ──────────────────────────────────────────────────────────
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({required this.firstName, required this.initial});
+  const _HomeHeader({required this.firstName});
 
   final String firstName;
-  final String initial;
 
   @override
   Widget build(BuildContext context) {
@@ -257,19 +286,6 @@ class _HomeHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: _HomeColors.primary,
-            child: Text(
-              initial,
-              style: GoogleFonts.poppins(
-                color: _HomeColors.background,
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,7 +376,7 @@ class _WeatherBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '🌧 Rain expected in the next 2 days — $prob% chance.',
+                  '🌧 Rain expected today — up to $prob% chance.',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -405,7 +421,7 @@ class _WeatherBanner extends StatelessWidget {
 }
 
 class _SearchCard extends StatefulWidget {
-  const _SearchCard();
+  const _SearchCard({super.key});
 
   @override
   State<_SearchCard> createState() => _SearchCardState();
@@ -462,6 +478,12 @@ class _SearchCardState extends State<_SearchCard> {
     });
   }
 
+  void fillRoute(String origin, String destination) {
+    _fromController.text = origin;
+    _toController.text = destination;
+    setState(() => _gpsAutoFilled = false);
+  }
+
   void _onFromChanged() {
     if (_gpsAutoFilled) setState(() => _gpsAutoFilled = false);
   }
@@ -475,11 +497,23 @@ class _SearchCardState extends State<_SearchCard> {
       return;
     }
     if (mounted) setState(() => _locationServiceDisabled = false);
-    final zone = await LocationUtils.detectZone();
-    if (zone != null && mounted) {
-      _fromController.text = zone;
+
+    final position = await LocationUtils.getCurrentPosition();
+    if (position == null || !mounted) return;
+
+    // Try real reverse geocoding first, fall back to zone name
+    final address = await GeocodingService.getAddressFromCoords(
+      lat: position.latitude,
+      lon: position.longitude,
+    );
+    final label = address ??
+        LocationUtils.zoneFromLatLon(position.latitude, position.longitude) ??
+        'Current location';
+
+    if (mounted) {
+      _fromController.text = label;
       setState(() => _gpsAutoFilled = true);
-      debugPrint('[GPS] auto-filled: $zone');
+      debugPrint('[GPS] auto-filled: $label');
     }
   }
 
@@ -554,7 +588,7 @@ class _SearchCardState extends State<_SearchCard> {
           TextField(
             controller: _fromController,
             style: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.textPrimary),
-            decoration: _fieldDecoration('Enter origin', Icons.circle, 10),
+            decoration: _fieldDecoration('Enter origin or detect location', Icons.circle, 10),
           ),
           if (_gpsAutoFilled) ...[
             const SizedBox(height: 3),
@@ -760,38 +794,28 @@ class _RideCard extends StatelessWidget {
 }
 
 class _RecurringRidesSection extends StatelessWidget {
-  const _RecurringRidesSection({required this.routes});
+  const _RecurringRidesSection({
+    required this.routes,
+    this.onRouteTap,
+  });
 
   final List<Map<String, dynamic>> routes;
+  final void Function(String origin, String destination)? onRouteTap;
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Text(
-                'Recurring Rides',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: _HomeColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: () {},
-                child: Text(
-                  'View All',
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: _HomeColors.primary,
-                  ),
-                ),
-              ),
-            ],
+          child: Text(
+            'Recurring Rides',
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: _HomeColors.textPrimary,
+            ),
           ),
         ),
         if (routes.isEmpty)
@@ -811,10 +835,10 @@ class _RecurringRidesSection extends StatelessWidget {
             final route = entry.value;
             final origin = route['origin'] as String? ?? '';
             final destination = route['destination'] as String? ?? 'Campus Uniandes';
-            final count = route['count'] as int? ?? 0;
             return Column(
               children: [
                 ListTile(
+                  onTap: () => onRouteTap?.call(origin, destination),
                   leading: const CircleAvatar(
                     backgroundColor: _HomeColors.weatherBg,
                     child: Icon(Icons.route, color: _HomeColors.primary),
@@ -826,16 +850,6 @@ class _RecurringRidesSection extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                       color: _HomeColors.textPrimary,
                     ),
-                  ),
-                  subtitle: Text(
-                    'Used $count times this month',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12, color: _HomeColors.muted),
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: _HomeColors.muted,
                   ),
                 ),
                 if (i < routes.length - 1)
@@ -958,8 +972,20 @@ class _ExploreAlternatives extends StatelessWidget {
                 icon: Icons.directions_car,
                 title: 'Carpool',
                 subtitle: 'Split fare with\nstudents',
-                tooltip: 'Filter by shared fare rides',
-                onPressed: () => context.go('/rides'),
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Coming soon',
+                      style: GoogleFonts.poppins(color: Colors.white),
+                    ),
+                    backgroundColor: _HomeColors.primary,
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
               ),
               _AlternativeCard(
                 icon: Icons.directions_bus,
@@ -1013,14 +1039,12 @@ class _AlternativeCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onPressed,
-    this.tooltip,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback? onPressed;
-  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -1059,9 +1083,7 @@ class _AlternativeCard extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             height: 32,
-            child: Tooltip(
-              message: tooltip ?? '',
-              child: ElevatedButton(
+            child: ElevatedButton(
                 onPressed: onPressed,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _HomeColors.primary,
@@ -1078,7 +1100,6 @@ class _AlternativeCard extends StatelessWidget {
                 ),
                 child: const Text('VIEW OPTION'),
               ),
-            ),
           ),
         ],
       ),

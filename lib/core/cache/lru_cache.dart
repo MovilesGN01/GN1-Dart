@@ -3,7 +3,7 @@ import 'dart:collection';
 /// Thread-safe by design: Dart isolates are
 /// single-threaded, no mutex needed.
 /// Capacity 50 covers ~5-10 origin/destination
-/// combinations per session (~100KB max).
+/// combinations per session (~100 KB max).
 class LRUCache<K, V> {
   LRUCache({this.capacity = 50});
 

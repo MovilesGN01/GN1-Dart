@@ -1,14 +1,39 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/connectivity/connectivity_service.dart';
 import '../../data/repositories/user_repository.dart';
 
 class RegisterViewModel extends ChangeNotifier {
   final UserRepository _repository;
 
-  RegisterViewModel(this._repository);
+  RegisterViewModel(this._repository) {
+    _setupConnectivityListener();
+  }
+
+  StreamSubscription<bool>? _connectivitySub;
+
+  void _setupConnectivityListener() {
+    _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
+      isOffline = !isOnline;
+      notifyListeners();
+    });
+  }
+
+  Future<void> checkConnectivity() async {
+    isOffline = !(await ConnectivityService().isOnline());
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
 
   bool isLoading = false;
   bool isOffline = false;

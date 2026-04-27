@@ -10,7 +10,7 @@ class CommunityScreen extends StatelessWidget {
       body: Center(
         child: Text('Community'),
       ),
-      bottomNavigationBar: UniRideBottomNav(currentIndex: 2),
+      bottomNavigationBar: UniRideBottomNav(currentIndex: 3),
     );
   }
 }

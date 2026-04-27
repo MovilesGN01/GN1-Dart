@@ -37,8 +37,7 @@ extension RideEntityExtension on RideModel {
       zone: (m['zone'] as String?) ?? '',
       gender: gender,
       isFemaleDriver: gender.toLowerCase() == 'female',
-      punctualityRate:
-          ((m['punctuality_rate'] as num?)?.toDouble()) ?? 0.0,
+      punctualityRate: ((m['punctuality_rate'] as num?)?.toDouble()) ?? 0.0,
       hasRainForecast: false,
     );
   }
