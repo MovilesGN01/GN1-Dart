@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/connectivity/connectivity_service.dart';
 import '../../data/models/ride_model.dart';
+import '../../data/models/ride_status_model.dart';
 import '../../data/repositories/impl/firebase_ride_repository.dart';
 import '../../data/repositories/ride_repository.dart';
 
@@ -26,6 +27,9 @@ class RideViewModel extends ChangeNotifier {
   bool isFromCache = false;
   bool isOffline = false;
 
+  RideStatusModel? activeRide;
+  String? _activeRideUserId;
+
   List<RideModel> get rides => _rides;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -43,6 +47,9 @@ class RideViewModel extends ChangeNotifier {
       if (isOnline && (wasOffline || isFromCache)) {
         debugPrint('[RideVM] back online — reloading rides');
         invalidateAndReload();
+        if (_activeRideUserId != null) {
+          loadActiveRide(_activeRideUserId!);
+        }
       }
     });
   }
@@ -94,6 +101,14 @@ class RideViewModel extends ChangeNotifier {
     await loadAvailableRides();
 
     debugPrint('[RideVM] invalidateAndReload done, isFromCache=$isFromCache');
+  }
+
+  Future<void> loadActiveRide(String userId) async {
+    _activeRideUserId = userId;
+    try {
+      activeRide = await _repository.getActiveRideForPassenger(userId);
+      notifyListeners();
+    } catch (_) {}
   }
 
   void setSearchTerms(String origin, String destination) {

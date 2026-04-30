@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -46,11 +47,12 @@ class MyBookingsViewModel extends ChangeNotifier {
       final pending = await _bookingRepository.getPendingBookings(user.uid);
       _pendingCount = pending.length;
 
-      // Pending reservations at the top, then confirmed newest-first
       _bookings = [...pending, ...confirmed];
 
       if (!_isOffline && pending.isNotEmpty) {
         _syncPending(pending, user.uid);
+      } else if (!_isOffline) {
+        _syncPendingRatings(user.uid);
       }
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -60,7 +62,8 @@ class MyBookingsViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _syncPending(List<BookingModel> pending, String userId) async {
+  Future<void> _syncPending(
+      List<BookingModel> pending, String userId) async {
     _isSyncing = true;
     notifyListeners();
 
@@ -69,7 +72,6 @@ class MyBookingsViewModel extends ChangeNotifier {
     for (final booking in pending) {
       if (booking.localId == null) continue;
 
-      // Expiry guard: discard reservations for rides that already departed
       if (booking.departureTime.isBefore(DateTime.now())) {
         await _bookingRepository.deletePendingBooking(booking.localId!);
         anySynced = true;
@@ -86,13 +88,38 @@ class MyBookingsViewModel extends ChangeNotifier {
         await _bookingRepository.deletePendingBooking(booking.localId!);
         anySynced = true;
       } catch (_) {
-        // Keep pending — will retry on next load
+        // Keep pending — retry on next load
       }
     }
+
+    await _syncPendingRatings(userId);
 
     _isSyncing = false;
     notifyListeners();
 
     if (anySynced) await load();
+  }
+
+  Future<void> _syncPendingRatings(String userId) async {
+    final pendingRatings =
+        await _bookingRepository.getPendingRatings(userId);
+    if (pendingRatings.isEmpty) return;
+
+    for (final row in pendingRatings) {
+      final rideId = row['ride_id'] as String;
+      final rating = row['rating'] as int;
+      final localId = row['local_id'] as String;
+
+      try {
+        await _rideRepository.submitRating(rideId: rideId, rating: rating);
+        await _bookingRepository.deletePendingRating(localId);
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists') {
+          await _bookingRepository.deletePendingRating(localId);
+        }
+      } catch (_) {
+        // Network error — keep pending for next sync
+      }
+    }
   }
 }

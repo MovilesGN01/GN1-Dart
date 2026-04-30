@@ -18,7 +18,12 @@ class BookingLocalDatasource {
   Future<Database> _initDatabase() async {
     final dir = await getApplicationDocumentsDirectory();
     final path = join(dir.path, 'uniride_bookings.db');
-    return openDatabase(path, version: 1, onCreate: _onCreate);
+    return openDatabase(
+      path,
+      version: 2,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -58,7 +63,35 @@ class BookingLocalDatasource {
         created_at INTEGER NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE pending_ratings (
+        local_id TEXT PRIMARY KEY,
+        ride_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        driver_id TEXT NOT NULL,
+        rating INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
   }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pending_ratings (
+          local_id TEXT PRIMARY KEY,
+          ride_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          driver_id TEXT NOT NULL,
+          rating INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      ''');
+    }
+  }
+
+  // ── Bookings ──────────────────────────────────────────────────────────────
 
   Future<void> cacheBookings(
     String userId,
@@ -68,7 +101,8 @@ class BookingLocalDatasource {
     final batch = db.batch();
     batch.delete('bookings', where: 'passenger_id = ?', whereArgs: [userId]);
     for (final row in rows) {
-      batch.insert('bookings', row, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('bookings', row,
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
@@ -82,6 +116,8 @@ class BookingLocalDatasource {
       orderBy: 'created_at DESC',
     );
   }
+
+  // ── Pending bookings ──────────────────────────────────────────────────────
 
   Future<String> insertPendingBooking({
     required String rideId,
@@ -133,5 +169,57 @@ class BookingLocalDatasource {
       where: 'local_id = ?',
       whereArgs: [localId],
     );
+  }
+
+  // ── Pending ratings ───────────────────────────────────────────────────────
+
+  Future<String> insertPendingRating({
+    required String rideId,
+    required String userId,
+    required String driverId,
+    required int rating,
+  }) async {
+    final db = await _database;
+    final localId = const Uuid().v4();
+    await db.insert('pending_ratings', {
+      'local_id': localId,
+      'ride_id': rideId,
+      'user_id': userId,
+      'driver_id': driverId,
+      'rating': rating,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    });
+    return localId;
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingRatings(String userId) async {
+    final db = await _database;
+    return db.query(
+      'pending_ratings',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  Future<void> deletePendingRating(String localId) async {
+    final db = await _database;
+    await db.delete(
+      'pending_ratings',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
+  }
+
+  Future<bool> hasPendingRatingForRide(
+      String rideId, String userId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'pending_ratings',
+      where: 'ride_id = ? AND user_id = ?',
+      whereArgs: [rideId, userId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 }

@@ -2,6 +2,7 @@
 import '../ride_repository.dart';
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
+import '../../models/ride_status_model.dart';
 
 class MockRideRepository implements RideRepository {
   final List<RideModel> _rides = [
@@ -83,5 +84,18 @@ class MockRideRepository implements RideRepository {
         seatsAvailable: _rides[index].seatsAvailable - 1,
       );
     }
+  }
+
+  @override
+  Stream<RideStatusModel> listenToRideStatus(String rideId) =>
+      const Stream.empty();
+
+  @override
+  Future<RideStatusModel?> getActiveRideForPassenger(String userId) async =>
+      null;
+
+  @override
+  Future<void> submitRating({required String rideId, required int rating}) {
+    throw UnimplementedError('Use FirebaseRideRepository for rating.');
   }
 }

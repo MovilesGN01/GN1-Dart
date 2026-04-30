@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,7 @@ import '../../core/db/database_helper.dart';
 import '../../core/location_utils.dart';
 import '../../core/utils/geocoding_service.dart';
 import '../../data/models/ride_model.dart';
+import '../../data/models/ride_status_model.dart';
 import '../../data/models/weather_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/home/weather_viewmodel.dart';
@@ -33,6 +35,8 @@ abstract final class _HomeColors {
   static const weatherBg     = Color(0xFFEFF6FF);
   static const badgeBg       = Color(0xFFE8F5E9);
   static const badgeText     = Color(0xFF2E7D32);
+  static const activeRideBg  = Color(0xFFEFF6FF);
+  static const activeRideBorder = Color(0xFF93C5FD);
 }
 
 // ── Display model (for carousel cards) ──────────────────────────────────────
@@ -119,6 +123,11 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<WeatherViewModel>().loadWeather();
       context.read<WeatherViewModel>().startAutoRefresh();
       context.read<AuthViewModel>().loadRecurringRoutes();
+
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId != null) {
+        context.read<RideViewModel>().loadActiveRide(userId);
+      }
     });
   }
 
@@ -127,12 +136,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final rideVm = context.watch<RideViewModel>();
     final authVm = context.watch<AuthViewModel>();
 
-    final String firstName = authVm.currentUser?.name.split(' ').first ?? 'there';
+    final String firstName =
+        authVm.currentUser?.name.split(' ').first ?? 'there';
 
     final now = DateTime.now();
-    final upcomingRides = rideVm.rides.where((r) =>
-        r.departureTime.isAfter(now) &&
-        r.departureTime.isBefore(now.add(const Duration(minutes: 30)))).toList();
+    final upcomingRides = rideVm.rides
+        .where((r) =>
+            r.departureTime.isAfter(now) &&
+            r.departureTime
+                .isBefore(now.add(const Duration(minutes: 30))))
+        .toList();
     final List<_RideData> displayRides =
         upcomingRides.map(_RideData.fromModel).toList();
 
@@ -161,7 +174,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Offline / cache banner — inside SafeArea so it clears the status bar
               Consumer<RideViewModel>(
                 builder: (_, vm, _) => OfflineBanner(
                   isOffline: vm.isOffline,
@@ -169,11 +181,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Header
               _HomeHeader(firstName: firstName),
               const SizedBox(height: 8),
 
-              // Weather banner — driven directly by WeatherViewModel, not local state
+              // Current / Active Ride card — shown when passenger has a ride in progress
+              if (rideVm.activeRide != null) ...[
+                _CurrentRideCard(ride: rideVm.activeRide!),
+                const SizedBox(height: 12),
+              ],
+
               Consumer<WeatherViewModel>(
                 builder: (_, vm, _) {
                   final weather = vm.weather;
@@ -197,15 +213,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
 
-              // Search card
               _SearchCard(key: _searchCardKey),
               const SizedBox(height: 16),
 
-              // Explore alternatives
               const _ExploreAlternatives(),
               const SizedBox(height: 16),
 
-              // Available rides
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
@@ -253,13 +266,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: displayRides.length,
-                    itemBuilder: (_, i) => _RideCard(ride: displayRides[i]),
+                    itemBuilder: (_, i) =>
+                        _RideCard(ride: displayRides[i]),
                   ),
                 ),
 
               const SizedBox(height: 16),
 
-              // Recurring rides
               _RecurringRidesSection(
                 routes: authVm.recurringRoutes,
                 onRouteTap: _onRecurringRideTap,
@@ -267,6 +280,139 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 24),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Current Ride card ─────────────────────────────────────────────────────────
+
+class _CurrentRideCard extends StatelessWidget {
+  const _CurrentRideCard({required this.ride});
+
+  final RideStatusModel ride;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push('/active-ride/${ride.rideId}'),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _HomeColors.activeRideBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _HomeColors.activeRideBorder, width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: _HomeColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Current Ride',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _HomeColors.primary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'View details →',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: _HomeColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '${ride.origin} → ${ride.destination}',
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: _HomeColors.textPrimary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: _HomeColors.primary,
+                  child: Text(
+                    ride.driverName.isNotEmpty
+                        ? ride.driverName[0].toUpperCase()
+                        : '?',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  ride.driverName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: _HomeColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _HomeColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    'Driver en route',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _HomeColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (ride.selectedMeetingPoint.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.place_outlined,
+                      size: 13, color: _HomeColors.muted),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      ride.selectedMeetingPoint,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: _HomeColors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -306,7 +452,6 @@ class _HomeHeader extends StatelessWidget {
                     color: _HomeColors.textPrimary,
                   ),
                 ),
-                // ⚠️ AQUÍ ESTÁ LA CORRECCIÓN DEL NUEVO OVERFLOW
                 Row(
                   children: [
                     const Icon(
@@ -315,7 +460,6 @@ class _HomeHeader extends StatelessWidget {
                       color: _HomeColors.primary,
                     ),
                     const SizedBox(width: 4),
-                    // 1. Envolvemos el texto en Flexible
                     Flexible(
                       child: Text(
                         'Uniandes · Verified Student',
@@ -323,7 +467,6 @@ class _HomeHeader extends StatelessWidget {
                           fontSize: 12,
                           color: _HomeColors.primary,
                         ),
-                        // 2. Le indicamos que corte con puntos suspensivos si no cabe
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -333,7 +476,7 @@ class _HomeHeader extends StatelessWidget {
               ],
             ),
           ),
-          const _WeatherChip(), // Mantén este con la corrección anterior
+          const _WeatherChip(),
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(
@@ -369,7 +512,8 @@ class _WeatherBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.water_drop, color: _HomeColors.primary, size: 28),
+          const Icon(Icons.water_drop,
+              color: _HomeColors.primary, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -412,7 +556,8 @@ class _WeatherBanner extends StatelessWidget {
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(Icons.close, size: 16, color: _HomeColors.muted),
+            child: const Icon(Icons.close,
+                size: 16, color: _HomeColors.muted),
           ),
         ],
       ),
@@ -447,7 +592,6 @@ class _SearchCardState extends State<_SearchCard> {
       if (!mounted) return;
       await _tryAutoFillLocation();
 
-      // Re-trigger GPS when GPS service toggles
       _locationServiceStream = Geolocator.getServiceStatusStream().listen(
         (ServiceStatus status) {
           if (!mounted) return;
@@ -460,16 +604,16 @@ class _SearchCardState extends State<_SearchCard> {
         },
       );
 
-      // Re-trigger GPS when network comes back (airplane mode fix)
-      _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
+      _connectivitySub =
+          ConnectivityService().onStatusChanged.listen((isOnline) {
         if (isOnline && mounted) {
           debugPrint('[GPS] connectivity restored — retrying location');
           _tryAutoFillLocation();
         }
       });
 
-      // Refresh location every 5 minutes while on this screen
-      _locationRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _locationRefreshTimer =
+          Timer.periodic(const Duration(minutes: 5), (_) {
         if (mounted) {
           debugPrint('[GPS] periodic refresh triggered');
           _tryAutoFillLocation();
@@ -489,9 +633,9 @@ class _SearchCardState extends State<_SearchCard> {
   }
 
   Future<void> _tryAutoFillLocation() async {
-    // Allow fill if field is empty OR was GPS-filled (not manually typed)
     if (_fromController.text.isNotEmpty && !_gpsAutoFilled) return;
-    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final bool serviceEnabled =
+        await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) setState(() => _locationServiceDisabled = true);
       return;
@@ -501,13 +645,13 @@ class _SearchCardState extends State<_SearchCard> {
     final position = await LocationUtils.getCurrentPosition();
     if (position == null || !mounted) return;
 
-    // Try real reverse geocoding first, fall back to zone name
     final address = await GeocodingService.getAddressFromCoords(
       lat: position.latitude,
       lon: position.longitude,
     );
     final label = address ??
-        LocationUtils.zoneFromLatLon(position.latitude, position.longitude) ??
+        LocationUtils.zoneFromLatLon(
+                position.latitude, position.longitude) ??
         'Current location';
 
     if (mounted) {
@@ -528,11 +672,14 @@ class _SearchCardState extends State<_SearchCard> {
     super.dispose();
   }
 
-  InputDecoration _fieldDecoration(String hint, IconData icon, double iconSize) {
+  InputDecoration _fieldDecoration(
+      String hint, IconData icon, double iconSize) {
     return InputDecoration(
-      prefixIcon: Icon(icon, size: iconSize, color: _HomeColors.primary),
+      prefixIcon:
+          Icon(icon, size: iconSize, color: _HomeColors.primary),
       hintText: hint,
-      hintStyle: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.muted),
+      hintStyle:
+          GoogleFonts.poppins(fontSize: 14, color: _HomeColors.muted),
       filled: true,
       fillColor: _HomeColors.background,
       contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -583,23 +730,22 @@ class _SearchCardState extends State<_SearchCard> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // FROM
           TextField(
             controller: _fromController,
-            style: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.textPrimary),
-            decoration: _fieldDecoration('Enter origin or detect location', Icons.circle, 10),
+            style: GoogleFonts.poppins(
+                fontSize: 14, color: _HomeColors.textPrimary),
+            decoration: _fieldDecoration(
+                'Enter origin or detect location', Icons.circle, 10),
           ),
           if (_gpsAutoFilled) ...[
             const SizedBox(height: 3),
             Text(
               '📍 Detected automatically — tap to edit',
-              style: GoogleFonts.poppins(fontSize: 10, color: _HomeColors.muted),
+              style: GoogleFonts.poppins(
+                  fontSize: 10, color: _HomeColors.muted),
             ),
           ],
           const SizedBox(height: 8),
-
-          // Connector
           Container(
             width: 1,
             height: 16,
@@ -607,18 +753,17 @@ class _SearchCardState extends State<_SearchCard> {
             margin: const EdgeInsets.only(left: 16),
           ),
           const SizedBox(height: 8),
-
-          // TO
           TextField(
             controller: _toController,
-            style: GoogleFonts.poppins(fontSize: 14, color: _HomeColors.textPrimary),
-            decoration: _fieldDecoration('Enter destination', Icons.location_on, 16),
+            style: GoogleFonts.poppins(
+                fontSize: 14, color: _HomeColors.textPrimary),
+            decoration: _fieldDecoration(
+                'Enter destination', Icons.location_on, 16),
           ),
           const SizedBox(height: 8),
-
-          // Departure time
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
               color: _HomeColors.background,
               border: Border.all(color: _HomeColors.border),
@@ -659,21 +804,23 @@ class _SearchCardState extends State<_SearchCard> {
                     Icons.keyboard_arrow_down,
                     color: _HomeColors.muted,
                   ),
-                  onChanged: (val) => setState(() => _selectedTime = val!),
+                  onChanged: (val) =>
+                      setState(() => _selectedTime = val!),
                   underline: const SizedBox(),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
-
           SizedBox(
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
               onPressed: () {
-                final from = Uri.encodeComponent(_fromController.text.trim());
-                final to = Uri.encodeComponent(_toController.text.trim());
+                final from =
+                    Uri.encodeComponent(_fromController.text.trim());
+                final to =
+                    Uri.encodeComponent(_toController.text.trim());
                 final dep = Uri.encodeComponent(_selectedTime);
                 context.go('/rides?from=$from&to=$to&departure=$dep');
               },
@@ -773,7 +920,8 @@ class _RideCard extends StatelessWidget {
           if (ride.badge != null) ...[
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: _HomeColors.badgeBg,
                 borderRadius: BorderRadius.circular(20),
@@ -820,7 +968,8 @@ class _RecurringRidesSection extends StatelessWidget {
         ),
         if (routes.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
               'No recurring rides yet.',
               style: GoogleFonts.poppins(
@@ -834,7 +983,8 @@ class _RecurringRidesSection extends StatelessWidget {
             final i = entry.key;
             final route = entry.value;
             final origin = route['origin'] as String? ?? '';
-            final destination = route['destination'] as String? ?? 'Campus Uniandes';
+            final destination =
+                route['destination'] as String? ?? 'Campus Uniandes';
             return Column(
               children: [
                 ListTile(
@@ -881,11 +1031,14 @@ class _WeatherChip extends StatelessWidget {
 
         if (weather == null) {
           return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 4)
+              ],
             ),
             child: const Text('--', style: TextStyle(fontSize: 11)),
           );
@@ -893,7 +1046,8 @@ class _WeatherChip extends StatelessWidget {
 
         return Container(
           constraints: const BoxConstraints(maxWidth: 110),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -972,58 +1126,22 @@ class _ExploreAlternatives extends StatelessWidget {
                 icon: Icons.directions_car,
                 title: 'Carpool',
                 subtitle: 'Split fare with\nstudents',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Coming soon',
-                      style: GoogleFonts.poppins(color: Colors.white),
-                    ),
-                    backgroundColor: _HomeColors.primary,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
+                onPressed: () => ScaffoldMessenger.of(context)
+                    .showSnackBar(_comingSoonSnack()),
               ),
               _AlternativeCard(
                 icon: Icons.directions_bus,
                 title: 'University Bus',
                 subtitle: 'Official campus\nbus routes',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Coming soon',
-                      style: GoogleFonts.poppins(color: Colors.white),
-                    ),
-                    backgroundColor: _HomeColors.primary,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
+                onPressed: () => ScaffoldMessenger.of(context)
+                    .showSnackBar(_comingSoonSnack()),
               ),
               _AlternativeCard(
                 icon: Icons.directions_walk,
                 title: 'Walk & Transit',
                 subtitle: 'TransMilenio\n& walking',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Coming soon',
-                      style: GoogleFonts.poppins(color: Colors.white),
-                    ),
-                    backgroundColor: _HomeColors.primary,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
+                onPressed: () => ScaffoldMessenger.of(context)
+                    .showSnackBar(_comingSoonSnack()),
               ),
             ],
           ),
@@ -1031,6 +1149,19 @@ class _ExploreAlternatives extends StatelessWidget {
       ],
     );
   }
+
+  SnackBar _comingSoonSnack() => SnackBar(
+        content: Text(
+          'Coming soon',
+          style: GoogleFonts.poppins(color: Colors.white),
+        ),
+        backgroundColor: _HomeColors.primary,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      );
 }
 
 class _AlternativeCard extends StatelessWidget {
@@ -1084,22 +1215,22 @@ class _AlternativeCard extends StatelessWidget {
           SizedBox(
             height: 32,
             child: ElevatedButton(
-                onPressed: onPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _HomeColors.primary,
-                  foregroundColor: _HomeColors.background,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 0,
-                  padding: EdgeInsets.zero,
-                  textStyle: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _HomeColors.primary,
+                foregroundColor: _HomeColors.background,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text('VIEW OPTION'),
+                elevation: 0,
+                padding: EdgeInsets.zero,
+                textStyle: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+              child: const Text('VIEW OPTION'),
+            ),
           ),
         ],
       ),

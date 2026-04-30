@@ -1,6 +1,8 @@
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/data/repositories/impl/firebase_ride_repository.dart';
+import 'package:uniride/features/active_ride/active_ride_screen.dart';
+import 'package:uniride/features/active_ride/active_ride_viewmodel.dart';
 import 'package:uniride/features/auth/login_screen.dart';
 import 'package:uniride/features/auth/register_screen.dart';
 import 'package:uniride/features/bookings/booking_details_screen.dart';
@@ -45,6 +47,17 @@ final appRouter = GoRouter(
             BookingRepository(),
           )..load(rideId),
           child: RideDetailsScreen(rideId: rideId),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/active-ride/:rideId',
+      builder: (context, state) {
+        final rideId = state.pathParameters['rideId']!;
+        return ChangeNotifierProvider(
+          create: (_) =>
+              ActiveRideViewModel(FirebaseRideRepository(), rideId),
+          child: ActiveRideScreen(rideId: rideId),
         );
       },
     ),

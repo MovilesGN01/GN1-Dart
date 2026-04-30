@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/cache/lru_cache.dart';
@@ -8,6 +9,7 @@ import '../../../core/db/daos/ride_dao.dart';
 import '../../../core/db/database_helper.dart';
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
+import '../../models/ride_status_model.dart';
 import '../ride_repository.dart';
 
 class FirebaseRideRepository implements RideRepository {
@@ -108,15 +110,6 @@ class FirebaseRideRepository implements RideRepository {
     final rawDriverId = (rideData['driverId'] as String?) ?? '';
     final driverId = _normalizeDriverId(rawDriverId);
 
-    Map<String, dynamic> driverData = {};
-    if (driverId.isNotEmpty) {
-      final driverDoc =
-          await _firestore.collection('users').doc(driverId).get();
-      if (driverDoc.exists && driverDoc.data() != null) {
-        driverData = driverDoc.data()!;
-      }
-    }
-
     final departureTime =
         _readDateTime(rideData['departureTime']) ?? DateTime.now();
 
@@ -193,6 +186,55 @@ class FirebaseRideRepository implements RideRepository {
     });
 
     invalidateRideCache();
+  }
+
+  @override
+  Stream<RideStatusModel> listenToRideStatus(String rideId) {
+    return _firestore
+        .collection('rides')
+        .doc(rideId)
+        .snapshots()
+        .map((snap) => RideStatusModel.fromDoc(snap));
+  }
+
+  @override
+  Future<RideStatusModel?> getActiveRideForPassenger(String userId) async {
+    try {
+      final requests = await _firestore
+          .collection('rideRequests')
+          .where('passengerId', isEqualTo: userId)
+          .where('status', whereIn: ['confirmed', 'accepted'])
+          .get();
+
+      for (final requestDoc in requests.docs) {
+        final rideId =
+            requestDoc.data()['rideId'] as String? ?? '';
+        if (rideId.isEmpty) continue;
+
+        final rideDoc =
+            await _firestore.collection('rides').doc(rideId).get();
+        if (!rideDoc.exists) continue;
+
+        final rideStatus =
+            rideDoc.data()?['status'] as String? ?? '';
+        if (RideStatusModel.isActiveStatus(rideStatus)) {
+          return RideStatusModel.fromDoc(rideDoc);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Repo] getActiveRideForPassenger error: $e');
+    }
+    return null;
+  }
+
+  @override
+  Future<void> submitRating({
+    required String rideId,
+    required int rating,
+  }) async {
+    final callable = FirebaseFunctions.instance
+        .httpsCallable('submitRideRatingWithReward');
+    await callable.call({'rideId': rideId, 'rating': rating});
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

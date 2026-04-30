@@ -1,9 +1,14 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repositories/impl/firebase_ride_repository.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
+import '../rating/rate_ride_sheet.dart';
+import '../rating/rate_ride_viewmodel.dart';
+import 'data/booking_repository.dart';
 import 'models/booking_model.dart';
 import 'viewmodels/my_bookings_viewmodel.dart';
 
@@ -185,6 +190,8 @@ class _BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isCompleted = booking.status == 'completed';
+
     return InkWell(
       onTap: booking.isLocalOnly
           ? null
@@ -270,7 +277,57 @@ class _BookingCard extends StatelessWidget {
                 ],
               ],
             ),
+            if (isCompleted && !booking.isLocalOnly) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 38,
+                child: OutlinedButton.icon(
+                  icon: const Icon(
+                    Icons.star_outline,
+                    size: 16,
+                    color: Color(0xFF1F5DFF),
+                  ),
+                  label: Text(
+                    'Rate this ride',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1F5DFF),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF1F5DFF)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () => _openRateSheet(context),
+                ),
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openRateSheet(BuildContext context) {
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeNotifierProvider(
+        create: (_) => RateRideViewModel(
+          FirebaseRideRepository(),
+          BookingRepository(),
+        ),
+        child: RateRideSheet(
+          rideId: booking.rideId,
+          driverId: booking.driverId,
+          driverName: booking.driverName,
+          userId: userId,
         ),
       ),
     );
@@ -320,6 +377,18 @@ class _StatusPill extends StatelessWidget {
           const Color(0xFFDCFCE7),
           'Confirmed',
           const Color(0xFF166534),
+        );
+      case 'accepted':
+        return (
+          const Color(0xFFDBEAFE),
+          'Accepted',
+          const Color(0xFF1D4ED8),
+        );
+      case 'completed':
+        return (
+          const Color(0xFFF1F5F9),
+          'Completed',
+          const Color(0xFF475569),
         );
       case 'pending_sync':
         return (

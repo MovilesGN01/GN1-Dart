@@ -13,6 +13,8 @@ class BookingRepository {
   final FirebaseFirestore _firestore;
   final BookingLocalDatasource _local;
 
+  // ── Bookings ──────────────────────────────────────────────────────────────
+
   Future<List<BookingModel>> getMyBookings(String userId) async {
     try {
       final snapshot = await _firestore
@@ -76,5 +78,34 @@ class BookingRepository {
 
   Future<void> deletePendingBooking(String localId) async {
     await _local.deletePendingBooking(localId);
+  }
+
+  // ── Pending ratings ───────────────────────────────────────────────────────
+
+  Future<String> savePendingRating({
+    required String rideId,
+    required String userId,
+    required String driverId,
+    required int rating,
+  }) async {
+    return _local.insertPendingRating(
+      rideId: rideId,
+      userId: userId,
+      driverId: driverId,
+      rating: rating,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingRatings(String userId) async {
+    return _local.getPendingRatings(userId);
+  }
+
+  Future<void> deletePendingRating(String localId) async {
+    await _local.deletePendingRating(localId);
+  }
+
+  Future<bool> hasPendingRatingForRide(
+      String rideId, String userId) async {
+    return _local.hasPendingRatingForRide(rideId, userId);
   }
 }
