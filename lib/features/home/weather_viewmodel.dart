@@ -4,18 +4,26 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/connectivity/connectivity_service.dart';
 import '../../data/repositories/weather_repository.dart';
 import '../../data/models/weather_model.dart';
 
 class WeatherViewModel extends ChangeNotifier {
   final WeatherRepository _repository;
 
-  WeatherViewModel(this._repository);
+  WeatherViewModel(this._repository) {
+    _connSub = ConnectivityService().onStatusChanged.listen((online) {
+      isOffline = !online;
+      notifyListeners();
+    });
+  }
 
   WeatherData? _weather;
   bool _isLoading = false;
+  bool isOffline = false;
   StreamController<WeatherData>? _weatherController;
   Timer? _refreshTimer;
+  StreamSubscription<bool>? _connSub;
   static const String _prefKey = 'last_weather_json';
 
   WeatherData? get weather => _weather;
@@ -110,6 +118,7 @@ class WeatherViewModel extends ChangeNotifier {
   void dispose() {
     _refreshTimer?.cancel();
     _weatherController?.close();
+    _connSub?.cancel();
     super.dispose();
   }
 }

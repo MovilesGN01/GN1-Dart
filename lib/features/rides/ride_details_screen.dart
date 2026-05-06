@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../../shared/widgets/offline_banner.dart';
 import 'ride_details_viewmodel.dart';
+import 'ride_viewmodel.dart';
 
 class RideDetailsScreen extends StatelessWidget {
   const RideDetailsScreen({
@@ -164,9 +166,18 @@ class RideDetailsScreen extends StatelessWidget {
               ],
             ),
           ),
-          body: RefreshIndicator(
-            onRefresh: () => vm.load(rideId),
-            child: ListView(
+          body: Column(
+            children: [
+              Consumer<RideViewModel>(
+                builder: (_, rideVm, _) => OfflineBanner(
+                  isOffline: rideVm.isOffline,
+                  isFromCache: rideVm.isFromCache,
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => vm.load(rideId),
+                  child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 _HeroCard(ride: ride),
@@ -411,6 +422,9 @@ class RideDetailsScreen extends StatelessWidget {
                 const SizedBox(height: 8),
               ],
             ),
+                ),
+              ),
+            ],
           ),
         );
       },

@@ -46,6 +46,16 @@ class DatabaseHelper {
     ''');
     await db.execute('CREATE INDEX idx_rides_zone ON rides(zone)');
     await db.execute('CREATE INDEX idx_rides_status ON rides(status)');
+
+    await db.execute('''
+      CREATE TABLE pending_operations (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        retry_count INTEGER DEFAULT 0
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
