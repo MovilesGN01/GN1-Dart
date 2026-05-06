@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(flutter pub *)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter build *)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/MovilesGN01/GN1-Dart/develop/lib/features/rides/available_rides_screen.dart\")"
+    ]
+  }
+}

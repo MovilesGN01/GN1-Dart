@@ -5,5 +5,10 @@ abstract class RideRepository {
   Future<List<RideModel>> getAvailableRides();
   Future<List<RideModel>> getMatchingRides(String userId);
   Future<RideDetailsModel> getRideDetails(String rideId);
-  Future<void> reserveRide(String rideId, String userId);
+  Future<void> reserveRide(
+    String rideId,
+    String userId, {
+    String selectedMeetingPoint = '',
+    String pickupReference = '',
+  });
 }

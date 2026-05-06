@@ -70,7 +70,12 @@ class MockRideRepository implements RideRepository {
   }
 
   @override
-  Future<void> reserveRide(String rideId, String userId) async {
+  Future<void> reserveRide(
+    String rideId,
+    String userId, {
+    String selectedMeetingPoint = '',
+    String pickupReference = '',
+  }) async {
     await Future.delayed(const Duration(milliseconds: 300));
     final index = _rides.indexWhere((r) => r.id == rideId);
     if (index != -1 && _rides[index].seatsAvailable > 0) {

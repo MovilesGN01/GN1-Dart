@@ -29,8 +29,9 @@ class UniRideBottomNav extends StatelessWidget {
       onTap: (index) {
         if (index == 0) context.go('/home');
         if (index == 1) context.go('/rides');
-        if (index == 2) context.go('/community');
-        if (index == 3) context.go('/profile');
+        if (index == 2) context.go('/bookings');
+        if (index == 3) context.go('/community');
+        if (index == 4) context.go('/profile');
       },
       items: const [
         BottomNavigationBarItem(
@@ -42,6 +43,11 @@ class UniRideBottomNav extends StatelessWidget {
           icon: Icon(Icons.directions_car_outlined),
           activeIcon: Icon(Icons.directions_car),
           label: 'Rides',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.event_seat_outlined),
+          activeIcon: Icon(Icons.event_seat),
+          label: 'My Bookings',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.group_outlined),

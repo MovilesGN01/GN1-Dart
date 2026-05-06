@@ -1,12 +1,40 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/connectivity/connectivity_service.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/models/user_model.dart';
 
 class AuthViewModel extends ChangeNotifier {
   final UserRepository _repository;
 
-  AuthViewModel(this._repository);
+  AuthViewModel(this._repository) {
+    _setupConnectivityListener();
+  }
+
+  StreamSubscription<bool>? _connectivitySub;
+  bool isOffline = false;
+
+  void _setupConnectivityListener() {
+    _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
+      isOffline = !isOnline;
+      notifyListeners();
+    });
+  }
+
+  Future<void> checkConnectivity() async {
+    isOffline = !(await ConnectivityService().isOnline());
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -63,9 +91,82 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<void> loadRecurringRoutes() async {
-    final userId = await _repository.getCurrentUserId();
-    if (userId == null) return;
-    _recurringRoutes = await _repository.getRecurringRoutes(userId);
+    debugPrint('[RecRides] calling getRideRecommendations '
+        'with userId=${currentUser?.id}');
+    try {
+      final callable = FirebaseFunctions.instance
+          .httpsCallable('getRideRecommendations');
+      final result = await callable.call({'userId': currentUser?.id ?? ''});
+
+      final data = result.data;
+      debugPrint('[RecRides] raw CF response: $data');
+
+      if (data != null && data is List && data.isNotEmpty) {
+        _recurringRoutes = data
+            .map<Map<String, dynamic>>(
+                (item) => Map<String, dynamic>.from(item))
+            .toList();
+        debugPrint('[RecRides] mapped routes: $_recurringRoutes');
+        debugPrint('[RecRides] routes count: ${_recurringRoutes.length}');
+        notifyListeners();
+        return;
+      }
+
+      debugPrint('[RecRides] CF returned empty — falling back to Firestore');
+    } catch (e) {
+      debugPrint('[RecRides] CF failed: $e — falling back to Firestore');
+    }
+
+    await _loadRoutesFromUserAnalytics();
+  }
+
+  Future<void> _loadRoutesFromUserAnalytics() async {
+    final userId = currentUser?.id;
+    if (userId == null || userId.isEmpty) {
+      _recurringRoutes = [];
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('user_analytics')
+          .doc(userId)
+          .get();
+
+      final ids = List<String>.from(
+          doc.data()?['recommendedRides'] ?? []);
+      debugPrint('[RecRides] direct Firestore ids: $ids');
+
+      final routes = <Map<String, dynamic>>[];
+      for (final id in ids) {
+        try {
+          final rideDoc = await FirebaseFirestore.instance
+              .collection('rides')
+              .doc(id)
+              .get();
+          if (rideDoc.exists && rideDoc.data() != null) {
+            final d = rideDoc.data()!;
+            routes.add({
+              'origin': (d['origin'] as String?) ?? '',
+              'destination':
+                  (d['destination'] as String?) ?? 'Campus Uniandes',
+              'count': 0,
+            });
+          }
+        } catch (e) {
+          debugPrint('[RecRides] failed to fetch ride $id: $e');
+        }
+      }
+
+      debugPrint('[RecRides] mapped routes: $routes');
+      debugPrint('[RecRides] routes count: ${routes.length}');
+      _recurringRoutes = routes;
+    } catch (e) {
+      debugPrint('[RecRides] user_analytics fallback failed: $e');
+      _recurringRoutes = [];
+    }
+
     notifyListeners();
   }
 }

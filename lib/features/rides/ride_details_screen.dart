@@ -123,18 +123,17 @@ class RideDetailsScreen extends StatelessWidget {
                     ),
                     onPressed: canReserve && !vm.isReserving
                         ? () async {
-                            final ok = await context
-                                .read<RideDetailsViewModel>()
-                                .reserve();
+                            final vm = context.read<RideDetailsViewModel>();
+                            final ok = await vm.reserve();
 
                             if (!context.mounted) return;
 
                             if (ok) {
+                              final msg = vm.reservedOffline
+                                  ? 'Reserva guardada. Se sincronizará cuando tengas conexión.'
+                                  : 'Ride reservado con éxito.';
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content:
-                                      Text('Ride reservado con éxito.'),
-                                ),
+                                SnackBar(content: Text(msg)),
                               );
                             }
                           }
@@ -282,24 +281,28 @@ class RideDetailsScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        ...ride.meetingPoints.map(
-                          (point) => RadioListTile<String>(
-                            value: point,
-                            groupValue: ride.selectedMeetingPoint,
-                            onChanged: (value) {
-                              if (value != null) {
-                                context.read<RideDetailsViewModel>().selectMeetingPoint(value);
-                              }
-                            },
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              point,
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF0F172A),
+                        RadioGroup<String>(
+                          groupValue: ride.selectedMeetingPoint ?? '',
+                          onChanged: (value) {
+                            if (value != null) {
+                              context.read<RideDetailsViewModel>().selectMeetingPoint(value);
+                            }
+                          },
+                          child: Column(
+                            children: ride.meetingPoints.map(
+                              (point) => RadioListTile<String>(
+                                value: point,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  point,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
                               ),
-                            ),
+                            ).toList(),
                           ),
                         ),
                       ] else ...[
@@ -446,7 +449,7 @@ class _HeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1F5DFF).withOpacity(0.18),
+            color: const Color(0xFF1F5DFF).withValues(alpha: 0.18),
             blurRadius: 20,
             offset: const Offset(0, 12),
           ),
@@ -476,7 +479,7 @@ class _HeroCard extends StatelessWidget {
                 child: Text(
                   RideDetailsScreen._formatDateTime(ride.departureTime),
                   style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.95),
+                    color: Colors.white.withValues(alpha: 0.95),
                     fontSize: 13,
                   ),
                 ),

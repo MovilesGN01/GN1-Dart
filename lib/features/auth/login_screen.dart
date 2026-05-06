@@ -1,9 +1,24 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'auth_viewmodel.dart';
+import '../../shared/widgets/offline_banner.dart';
+
+Widget? _limitCounter(
+  BuildContext context, {
+  required int currentLength,
+  required bool isFocused,
+  required int? maxLength,
+}) {
+  if (maxLength == null || currentLength < maxLength) return null;
+  return Text(
+    'Max $maxLength characters',
+    style: GoogleFonts.poppins(fontSize: 11, color: const Color(0xFFFF3B30)),
+  );
+}
 
 // ── Local colour palette ─────────────────────────────────────────────────────
 abstract final class _LoginColors {
@@ -44,6 +59,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthViewModel>().checkConnectivity();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -58,11 +83,21 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: _LoginColors.background,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: Column(
+          children: [
+            Consumer<AuthViewModel>(
+              builder: (context, vm, child) => OfflineBanner(
+                isOffline: vm.isOffline,
+                isFromCache: false,
+                messageOverride: 'No connection - Connect to the network',
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
               // Logo
               const _LogoSection(),
 
@@ -81,7 +116,10 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (_) => const _ForgotPasswordDialog(),
+                  ),
                   child: Text(
                     '¿Olvidaste tu contraseña?',
                     style: GoogleFonts.poppins(
@@ -144,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
 
               OutlinedButton(
-                onPressed: () {},
+                onPressed: () => context.go('/register'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _LoginColors.primary,
                   minimumSize: const Size(double.infinity, 52),
@@ -159,10 +197,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: const Text('Registrarse'),
               ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -211,6 +252,8 @@ class _EmailField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       keyboardType: TextInputType.emailAddress,
+      maxLength: 100,
+      buildCounter: _limitCounter,
       style: GoogleFonts.poppins(fontSize: 14, color: _LoginColors.textPrimary),
       decoration: InputDecoration(
         hintText: '@uniandes.edu.co',
@@ -235,6 +278,146 @@ class _EmailField extends StatelessWidget {
   }
 }
 
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog();
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  final _controller = TextEditingController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final email = _controller.text.trim();
+    if (!email.endsWith('@uniandes.edu.co')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Use your @uniandes.edu.co email',
+              style: GoogleFonts.poppins(color: Colors.white)),
+          backgroundColor: const Color(0xFFFF3B30),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _sending = true);
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reset link sent — check your inbox',
+                style: GoogleFonts.poppins(color: Colors.white)),
+            backgroundColor: const Color(0xFF111111),
+          ),
+        );
+      }
+    } on FirebaseAuthException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not send reset email. Try again.',
+                style: GoogleFonts.poppins(color: Colors.white)),
+            backgroundColor: const Color(0xFFFF3B30),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Reset password',
+        style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600, color: const Color(0xFF111111)),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Enter your institutional email and we\'ll send you a reset link.',
+            style: GoogleFonts.poppins(
+                fontSize: 13, color: const Color(0xFF555555)),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            style: GoogleFonts.poppins(
+                fontSize: 14, color: const Color(0xFF111111)),
+            decoration: InputDecoration(
+              hintText: 'yourname@uniandes.edu.co',
+              hintStyle:
+                  GoogleFonts.poppins(color: const Color(0xFF94A3B8)),
+              prefixIcon: const Icon(Icons.email_outlined,
+                  color: Color(0xFF94A3B8)),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                    color: Color(0xFF1F5DFF), width: 2),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _sending ? null : () => Navigator.of(context).pop(),
+          child: Text('Cancel',
+              style: GoogleFonts.poppins(color: const Color(0xFF555555))),
+        ),
+        ElevatedButton(
+          onPressed: _sending ? null : _send,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1F5DFF),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
+            textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          child: _sending
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2),
+                )
+              : const Text('Send link'),
+        ),
+      ],
+    );
+  }
+}
+
 class _PasswordField extends StatelessWidget {
   const _PasswordField({
     required this.controller,
@@ -251,6 +434,8 @@ class _PasswordField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       obscureText: !isVisible,
+      maxLength: 64,
+      buildCounter: _limitCounter,
       style: GoogleFonts.poppins(fontSize: 14, color: _LoginColors.textPrimary),
       decoration: InputDecoration(
         hintText: 'Contraseña',
