@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uniride/data/repositories/impl/firebase_ride_repository.dart';
@@ -79,6 +80,26 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/nfc',
       builder: (context, state) => const NfcAccessScreen(),
+    ),
+    GoRoute(
+      path: '/driver/create-ride',
+      builder: (_, __) => const Scaffold(
+          body: Center(child: Text('Create Ride'))),
+    ),
+    GoRoute(
+      path: '/driver/my-rides',
+      builder: (_, __) => const Scaffold(
+          body: Center(child: Text('My Rides'))),
+    ),
+    GoRoute(
+      path: '/driver/ride-requests',
+      builder: (_, __) => const Scaffold(
+          body: Center(child: Text('Ride Requests'))),
+    ),
+    GoRoute(
+      path: '/driver/active-ride',
+      builder: (_, __) => const Scaffold(
+          body: Center(child: Text('Active Ride'))),
     ),
   ],
 );

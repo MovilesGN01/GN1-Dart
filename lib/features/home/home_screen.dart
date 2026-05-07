@@ -138,21 +138,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: _HomeColors.background,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _HomeColors.primary,
-        tooltip: 'Asistente UniRide',
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const ChatbotSheet(),
-          );
-        },
-        child: const Icon(
-          Icons.smart_toy_outlined,
-          color: _HomeColors.background,
-        ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Consumer<AuthViewModel>(
+            builder: (_, auth, __) {
+              final role = auth.currentUser?.role ?? 'passenger';
+              final isDriver = role == 'driver' ||
+                  (role == 'both' && auth.activeMode == 'driver');
+              if (!isDriver) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: FloatingActionButton(
+                  heroTag: 'create_ride_fab',
+                  onPressed: () => context.push('/driver/create-ride'),
+                  backgroundColor: const Color(0xFF1A56DB),
+                  mini: true,
+                  tooltip: 'Create a ride',
+                  child: const Icon(Icons.add, color: Colors.white),
+                ),
+              );
+            },
+          ),
+          FloatingActionButton(
+            heroTag: 'chatbot_fab',
+            backgroundColor: _HomeColors.primary,
+            tooltip: 'Asistente UniRide',
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const ChatbotSheet(),
+              );
+            },
+            child: const Icon(
+              Icons.smart_toy_outlined,
+              color: _HomeColors.background,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: const UniRideBottomNav(currentIndex: 0),
       body: SafeArea(
@@ -305,6 +330,52 @@ class _HomeHeader extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: _HomeColors.textPrimary,
                   ),
+                ),
+                const SizedBox(height: 4),
+                Consumer<AuthViewModel>(
+                  builder: (_, auth, __) {
+                    final role = auth.currentUser?.role ?? 'passenger';
+                    final isDriver = role == 'driver' ||
+                        (role == 'both' && auth.activeMode == 'driver');
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDriver
+                            ? const Color(0xFF1A56DB).withOpacity(0.1)
+                            : Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDriver
+                              ? const Color(0xFF1A56DB).withOpacity(0.3)
+                              : Colors.grey.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isDriver ? Icons.drive_eta : Icons.person,
+                            size: 12,
+                            color: isDriver
+                                ? const Color(0xFF1A56DB)
+                                : Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isDriver ? 'Driver mode' : 'Passenger mode',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: isDriver
+                                  ? const Color(0xFF1A56DB)
+                                  : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
                 // ⚠️ AQUÍ ESTÁ LA CORRECCIÓN DEL NUEVO OVERFLOW
                 Row(
