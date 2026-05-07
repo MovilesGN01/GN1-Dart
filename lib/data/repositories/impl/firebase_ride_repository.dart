@@ -108,15 +108,6 @@ class FirebaseRideRepository implements RideRepository {
     final rawDriverId = (rideData['driverId'] as String?) ?? '';
     final driverId = _normalizeDriverId(rawDriverId);
 
-    Map<String, dynamic> driverData = {};
-    if (driverId.isNotEmpty) {
-      final driverDoc =
-          await _firestore.collection('users').doc(driverId).get();
-      if (driverDoc.exists && driverDoc.data() != null) {
-        driverData = driverDoc.data()!;
-      }
-    }
-
     final departureTime =
         _readDateTime(rideData['departureTime']) ?? DateTime.now();
 
