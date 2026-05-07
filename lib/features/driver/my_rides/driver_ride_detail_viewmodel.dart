@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../data/models/ride_model.dart';
@@ -118,6 +119,27 @@ class DriverRideDetailViewModel extends ChangeNotifier {
     } catch (e) {
       debugPrint('[RideDetail] updateRide error: $e');
       errorMessage = 'Failed to update ride. Please try again.';
+      return false;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> startRide() async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('startRide')
+          .call({'rideId': _ride.id});
+      _ride = _ride.copyWith(status: 'in_progress');
+      return true;
+    } catch (e) {
+      debugPrint('[RideDetail] startRide error: $e');
+      errorMessage = 'Failed to start ride. Please try again.';
       return false;
     } finally {
       isLoading = false;

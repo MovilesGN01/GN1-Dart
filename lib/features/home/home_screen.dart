@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -94,6 +95,33 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _weatherBannerDismissed = false;
   final GlobalKey<_SearchCardState> _searchCardKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
+  RideModel? _activeRide;
+  StreamSubscription<QuerySnapshot>? _activeRideSub;
+
+  void _subscribeToActiveRide() {
+    final userId = context.read<AuthViewModel>().currentUser?.id;
+    if (userId == null) return;
+    final role = context.read<AuthViewModel>().currentUser?.role ?? 'passenger';
+    if (role != 'driver' && role != 'both') return;
+
+    _activeRideSub = FirebaseFirestore.instance
+        .collection('rides')
+        .where('driverId', isEqualTo: userId)
+        .where('status', isEqualTo: 'in_progress')
+        .limit(1)
+        .snapshots()
+        .listen(
+      (snap) {
+        if (!mounted) return;
+        setState(() {
+          _activeRide = snap.docs.isNotEmpty
+              ? RideModel.fromMap(snap.docs.first.data(), snap.docs.first.id)
+              : null;
+        });
+      },
+      onError: (e) => debugPrint('[Home] active ride stream error: $e'),
+    );
+  }
 
   void _onRecurringRideTap(String origin, String destination) {
     _searchCardKey.currentState?.fillRoute(origin, destination);
@@ -106,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _activeRideSub?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -121,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<WeatherViewModel>().loadWeather();
       context.read<WeatherViewModel>().startAutoRefresh();
       context.read<AuthViewModel>().loadRecurringRoutes();
+      _subscribeToActiveRide();
     });
   }
 
@@ -195,6 +225,44 @@ class _HomeScreenState extends State<HomeScreen> {
                   isFromCache: vm.isFromCache,
                 ),
               ),
+
+              // Active ride banner (driver only)
+              if (_activeRide != null)
+                InkWell(
+                  onTap: () => context.push(
+                    '/driver/active-ride',
+                    extra: {'rideId': _activeRide!.id},
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    color: const Color(0xFF1A56DB),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.drive_eta,
+                            color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Active ride: ${_activeRide!.origin} → '
+                            '${_activeRide!.destination}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const Text(
+                          'Manage →',
+                          style: TextStyle(
+                              color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               // Header
               _HomeHeader(firstName: firstName),

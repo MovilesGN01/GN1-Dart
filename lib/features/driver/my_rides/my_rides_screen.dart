@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/ride_model.dart';
+import '../../../shared/widgets/bottom_nav_bar.dart';
 import '../../../shared/widgets/offline_banner.dart';
 import 'my_rides_viewmodel.dart';
 
@@ -20,6 +21,9 @@ abstract final class _Colors {
   static const blue = Color(0xFF2563EB);
   static const orange = Color(0xFFF97316);
   static const grey = Color(0xFF9CA3AF);
+  static const red = Color(0xFFDC2626);
+  static const redLight = Color(0xFFFEF2F2);
+  static const redBorder = Color(0xFFFCA5A5);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -64,14 +68,12 @@ class _MyRidesScreenState extends State<MyRidesScreen> {
 
     return Scaffold(
       backgroundColor: _Colors.background,
+      bottomNavigationBar: const UniRideBottomNav(currentIndex: 1),
       appBar: AppBar(
         backgroundColor: _Colors.background,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: _Colors.textPrimary),
-          onPressed: () => context.go('/home'),
-        ),
+        automaticallyImplyLeading: false,
         title: Text(
           'My Rides',
           style: GoogleFonts.poppins(
@@ -175,6 +177,9 @@ class _RideDriverCard extends StatelessWidget {
     final canNavigate = !isPending;
     final showActiveRide =
         ride.status == 'available' || ride.status == 'in_progress';
+    final now = DateTime.now();
+    final isOverdue = (ride.status == 'available' || ride.status == 'active') &&
+        ride.departureTime.isBefore(now);
 
     return GestureDetector(
       onTap: () async {
@@ -192,9 +197,12 @@ class _RideDriverCard extends StatelessWidget {
       child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _Colors.background,
+        color: isOverdue ? _Colors.redLight : _Colors.background,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _Colors.border),
+        border: Border.all(
+          color: isOverdue ? _Colors.redBorder : _Colors.border,
+          width: isOverdue ? 1.5 : 1,
+        ),
         boxShadow: const [
           BoxShadow(offset: Offset(0, 2), blurRadius: 8, color: Color(0x0A000000)),
         ],
@@ -278,11 +286,30 @@ class _RideDriverCard extends StatelessWidget {
           // Status row
           Row(
             children: [
-              _StatusChip(status: ride.status),
+              _StatusChip(status: ride.status, isOverdue: isOverdue),
             ],
           ),
 
-          if (isPending) ...[
+          if (isOverdue) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    size: 14, color: _Colors.red),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '¡Hora de salida pasada! Inicia el viaje o se cancelará automáticamente.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (isPending) ...[
             const SizedBox(height: 6),
             Text(
               'Will publish when reconnected',
@@ -363,12 +390,39 @@ class _RideDriverCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
+  const _StatusChip({required this.status, this.isOverdue = false});
 
   final String status;
+  final bool isOverdue;
 
   @override
   Widget build(BuildContext context) {
+    if (isOverdue) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEE2E2),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                size: 11, color: _Colors.red),
+            const SizedBox(width: 3),
+            Text(
+              '¡Iniciar ya!',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: _Colors.red,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final Color bg;
     final Color fg;
     final String label;

@@ -313,6 +313,43 @@ class _DetailView extends StatelessWidget {
               style: GoogleFonts.poppins(fontSize: 13, color: _C.red),
             ),
           ],
+
+          if (vm.canEdit) ...[
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                label: Text(
+                  'Start Ride',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _C.green,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: vm.isLoading
+                    ? null
+                    : () async {
+                        final started = await vm.startRide();
+                        if (started && context.mounted) {
+                          context.pushReplacement(
+                            '/driver/active-ride',
+                            extra: {'rideId': vm.ride.id},
+                          );
+                        }
+                      },
+              ),
+            ),
+          ],
         ],
       ),
     );

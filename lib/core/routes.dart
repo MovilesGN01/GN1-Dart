@@ -21,6 +21,7 @@ import 'package:uniride/features/driver/my_rides/driver_ride_detail_screen.dart'
 import 'package:uniride/features/driver/my_rides/driver_ride_detail_viewmodel.dart';
 import 'package:uniride/features/driver/my_rides/my_rides_screen.dart';
 import 'package:uniride/features/driver/my_rides/my_rides_viewmodel.dart';
+import 'package:uniride/features/driver/active_ride/active_ride_screen.dart';
 import 'package:uniride/features/driver/ride_requests/ride_requests_screen.dart';
 import 'package:uniride/features/driver/ride_requests/ride_requests_viewmodel.dart';
 import 'package:uniride/features/rides/ride_details_screen.dart';
@@ -133,8 +134,11 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/driver/active-ride',
-      builder: (context, state) => const Scaffold(
-          body: Center(child: Text('Active Ride'))),
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        final rideId = (extra?['rideId'] as String?) ?? '';
+        return ActiveRideScreen(rideId: rideId);
+      },
     ),
   ],
 );

@@ -42,11 +42,14 @@ class RideDao {
 
   Future<void> deleteExpiredRides() async {
     final db = await _helper.database;
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    // 15-minute grace so drivers can still start a ride after its scheduled time
+    final cutoffMs = DateTime.now()
+        .subtract(const Duration(minutes: 15))
+        .millisecondsSinceEpoch;
     final deleted = await db.delete(
       'rides',
       where: 'departure_time < ?',
-      whereArgs: [nowMs],
+      whereArgs: [cutoffMs],
     );
     debugPrint('[SQLite] deleted $deleted expired rides');
   }

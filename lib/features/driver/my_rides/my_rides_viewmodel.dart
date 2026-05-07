@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/connectivity/connectivity_service.dart';
@@ -31,6 +32,7 @@ class MyRidesViewModel extends ChangeNotifier {
   late final RideDao _dao;
   StreamSubscription<bool>? _connSub;
   StreamSubscription<QuerySnapshot>? _ridesSub;
+  final Set<String> _expiringRides = {};
 
   String? _lastDriverId;
 
@@ -52,7 +54,7 @@ class MyRidesViewModel extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
 
-    final now = DateTime.now();
+    final grace = const Duration(minutes: 15);
 
     _ridesSub = FirebaseFirestore.instance
         .collection('rides')
@@ -60,10 +62,31 @@ class MyRidesViewModel extends ChangeNotifier {
         .snapshots()
         .listen(
       (snap) {
-        rides = snap.docs
-            .map((d) => RideModel.fromMap(d.data(), d.id))
+        final now = DateTime.now();
+        final allRides = snap.docs.map((d) => RideModel.fromMap(d.data(), d.id)).toList();
+
+        // Auto-expire available/active rides past the 15-min grace window
+        for (final r in allRides) {
+          if ((r.status == 'available' || r.status == 'active') &&
+              r.departureTime.add(grace).isBefore(now) &&
+              !_expiringRides.contains(r.id)) {
+            _expiringRides.add(r.id);
+            FirebaseFunctions.instance
+                .httpsCallable('autoExpireRide')
+                .call({'rideId': r.id})
+                .then((_) => debugPrint('[MyRides] auto-expired ${r.id}'))
+                .catchError((e) {
+                  debugPrint('[MyRides] autoExpireRide failed for ${r.id}: $e');
+                  _expiringRides.remove(r.id);
+                });
+          }
+        }
+
+        rides = allRides
             .where((r) =>
-                r.departureTime.isAfter(now) || r.status == 'in_progress')
+                r.status == 'in_progress' ||
+                ((r.status == 'available' || r.status == 'active') &&
+                    r.departureTime.add(grace).isAfter(now)))
             .toList()
           ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
 
@@ -74,11 +97,15 @@ class MyRidesViewModel extends ChangeNotifier {
       },
       onError: (e) async {
         debugPrint('[MyRides] Firestore stream failed: $e');
+        final now = DateTime.now();
+        final grace = const Duration(minutes: 15);
         final cached = await _dao.fetchAll();
         rides = cached
             .where((r) =>
                 r.driverId == driverId &&
-                (r.departureTime.isAfter(now) || r.status == 'in_progress'))
+                (r.status == 'in_progress' ||
+                    ((r.status == 'available' || r.status == 'active') &&
+                        r.departureTime.add(grace).isAfter(now))))
             .toList()
           ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
         isFromCache = rides.isNotEmpty;
