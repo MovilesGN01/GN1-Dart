@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/connectivity/connectivity_service.dart';
@@ -25,6 +27,7 @@ class RideViewModel extends ChangeNotifier {
 
   bool isFromCache = false;
   bool isOffline = false;
+  Set<String> requestedRideIds = {};
 
   List<RideModel> get rides => _rides;
   bool get isLoading => _isLoading;
@@ -79,8 +82,25 @@ class RideViewModel extends ChangeNotifier {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
     }
 
+    await _loadRequestedRideIds();
+
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> _loadRequestedRideIds() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('rideRequests')
+          .where('passengerId', isEqualTo: uid)
+          .where('status', whereIn: ['pending', 'accepted'])
+          .get();
+      requestedRideIds = snap.docs.map((d) => d['rideId'] as String).toSet();
+    } catch (e) {
+      debugPrint('[RideVM] failed to load requested rides: $e');
+    }
   }
 
   Future<void> invalidateAndReload() async {

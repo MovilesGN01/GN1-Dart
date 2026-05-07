@@ -14,10 +14,12 @@ import '../../core/db/daos/ride_dao.dart';
 import '../../core/db/database_helper.dart';
 import '../../core/location_utils.dart';
 import '../../core/utils/geocoding_service.dart';
+import '../../data/models/notification_model.dart';
 import '../../data/models/ride_model.dart';
 import '../../data/models/weather_model.dart';
 import '../../features/auth/auth_viewmodel.dart';
 import '../../features/home/weather_viewmodel.dart';
+import '../../features/notifications/notifications_viewmodel.dart';
 import '../../features/rides/ride_viewmodel.dart';
 import '../chatbot/presentation/chatbot_sheet.dart';
 
@@ -404,16 +406,247 @@ class _HomeHeader extends StatelessWidget {
               ],
             ),
           ),
-          const _WeatherChip(), // Mantén este con la corrección anterior
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(
-              Icons.notifications_outlined,
-              color: _HomeColors.textPrimary,
-            ),
-            onPressed: () {},
+          const _WeatherChip(),
+          const SizedBox(width: 4),
+          Consumer<NotificationsViewModel>(
+            builder: (ctx, vm, _) {
+              final count = vm.unreadCount;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.notifications_outlined,
+                      color: _HomeColors.textPrimary,
+                    ),
+                    onPressed: () => _showNotificationsDialog(ctx, vm),
+                  ),
+                  if (count > 0)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: IgnorePointer(
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              count > 9 ? '9+' : '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
+      ),
+    );
+  }
+}
+
+void _showNotificationsDialog(
+    BuildContext context, NotificationsViewModel vm) {
+  vm.markAllAsRead();
+  showDialog<void>(
+    context: context,
+    builder: (_) => _NotificationsDialog(vm: vm),
+  );
+}
+
+class _NotificationsDialog extends StatelessWidget {
+  const _NotificationsDialog({required this.vm});
+
+  final NotificationsViewModel vm;
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 8, 0),
+            child: Row(
+              children: [
+                Text(
+                  'Notifications',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _HomeColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          ChangeNotifierProvider<NotificationsViewModel>.value(
+            value: vm,
+            child: Consumer<NotificationsViewModel>(
+              builder: (ctx, notifVm, _) {
+                final items = notifVm.notifications;
+                if (items.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.notifications_none,
+                            size: 48, color: Color(0xFF94A3B8)),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No notifications yet',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: _HomeColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.5,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (_, i) =>
+                        _NotifTile(item: items[i], timeAgo: _timeAgo),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotifTile extends StatelessWidget {
+  const _NotifTile({required this.item, required this.timeAgo});
+
+  final NotificationModel item;
+  final String Function(DateTime) timeAgo;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color iconBg;
+    final Color iconColor;
+    final IconData iconData;
+    switch (item.type) {
+      case 'accepted':
+        iconBg = const Color(0xFFDCFCE7);
+        iconColor = const Color(0xFF16A34A);
+        iconData = Icons.check_circle;
+      case 'rejected':
+        iconBg = const Color(0xFFFFEDED);
+        iconColor = const Color(0xFFDC2626);
+        iconData = Icons.cancel;
+      default: // new_request
+        iconBg = const Color(0xFFEFF6FF);
+        iconColor = _HomeColors.primary;
+        iconData = Icons.person_add_alt_1;
+    }
+
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).pop();
+        if (item.rideId.isEmpty) return;
+        if (item.type == 'new_request') {
+          context.push('/driver/ride-requests', extra: {
+            'rideId': item.rideId,
+            'origin': item.origin,
+            'destination': item.destination,
+          });
+        } else {
+          context.push('/rides/${item.rideId}');
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(iconData, size: 18, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.message,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: _HomeColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        timeAgo(item.createdAt),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: _HomeColors.muted,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ver viaje →',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _HomeColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

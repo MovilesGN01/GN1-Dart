@@ -21,6 +21,8 @@ import 'package:uniride/features/driver/my_rides/driver_ride_detail_screen.dart'
 import 'package:uniride/features/driver/my_rides/driver_ride_detail_viewmodel.dart';
 import 'package:uniride/features/driver/my_rides/my_rides_screen.dart';
 import 'package:uniride/features/driver/my_rides/my_rides_viewmodel.dart';
+import 'package:uniride/features/driver/ride_requests/ride_requests_screen.dart';
+import 'package:uniride/features/driver/ride_requests/ride_requests_viewmodel.dart';
 import 'package:uniride/features/rides/ride_details_screen.dart';
 import 'package:uniride/features/rides/ride_details_viewmodel.dart';
 
@@ -117,8 +119,17 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/driver/ride-requests',
-      builder: (context, state) => const Scaffold(
-          body: Center(child: Text('Ride Requests'))),
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return ChangeNotifierProvider(
+          create: (_) => RideRequestsViewModel(
+            rideId: (extra?['rideId'] as String?) ?? '',
+            origin: (extra?['origin'] as String?) ?? '',
+            destination: (extra?['destination'] as String?) ?? '',
+          ),
+          child: const RideRequestsScreen(),
+        );
+      },
     ),
     GoRoute(
       path: '/driver/active-ride',

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -608,7 +609,7 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _RideCard extends StatelessWidget {
+class _RideCard extends StatefulWidget {
   const _RideCard({
     required this.ride,
     required this.rank,
@@ -620,7 +621,80 @@ class _RideCard extends StatelessWidget {
   final bool isBestMatch;
 
   @override
+  State<_RideCard> createState() => _RideCardState();
+}
+
+class _RideCardState extends State<_RideCard> {
+  bool _isRequesting = false;
+
+  Future<void> _onReserve() async {
+    setState(() => _isRequesting = true);
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('requestRide')
+          .call({'rideId': widget.ride.id});
+
+      if (mounted) {
+        context
+            .read<RideViewModel>()
+            .requestedRideIds
+            .add(widget.ride.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Request sent to ${widget.ride.driverName}!',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: _RidesColors.primary,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.message ?? 'Could not send request. Try again.',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Unexpected error. Try again.',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRequesting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ride = widget.ride;
+    final rank = widget.rank;
+    final isBestMatch = widget.isBestMatch;
+    final alreadyRequested =
+        context.watch<RideViewModel>().requestedRideIds.contains(ride.id);
     final String timeStr = _fmtTime(ride.departureTime);
     final String priceStr = _fmtPrice(ride.price);
 
@@ -887,43 +961,66 @@ class _RideCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                SizedBox(
-                  width: 100,
-                  height: 40,
-                  child: ElevatedButton(
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Ride reserved with ${ride.driverName}!',
-                          style: GoogleFonts.poppins(color: Colors.white),
+                if (alreadyRequested)
+                  Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle,
+                            size: 14, color: Color(0xFF16A34A)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Solicitado',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF16A34A),
+                          ),
                         ),
+                      ],
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: 100,
+                    height: 40,
+                    child: ElevatedButton(
+                      onPressed: _isRequesting ? null : _onReserve,
+                      style: ElevatedButton.styleFrom(
                         backgroundColor: _RidesColors.primary,
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.zero,
+                        elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _RidesColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.zero,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: Text(
-                      'Reserve',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+                      child: _isRequesting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              'Reserve',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
-                ),
               ],
             ),
           ],

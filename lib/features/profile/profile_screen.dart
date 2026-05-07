@@ -393,6 +393,76 @@ class ProfileScreen extends StatelessWidget {
               _InfoRow(label: 'Saved routes', value: '3'),
             ],
           ),
+
+          const SizedBox(height: 24),
+
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.logout, size: 18, color: Color(0xFFDC2626)),
+              label: Text(
+                'Log out',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFDC2626),
+                ),
+              ),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    title: Text(
+                      'Log out',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                    content: Text(
+                      'Are you sure you want to log out?',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: Text(
+                          'Log out',
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFFDC2626),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if ((confirmed ?? false) && context.mounted) {
+                  await context.read<AuthViewModel>().signOut();
+                  if (context.mounted) context.go('/');
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFDC2626)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: const UniRideBottomNav(currentIndex: 4),

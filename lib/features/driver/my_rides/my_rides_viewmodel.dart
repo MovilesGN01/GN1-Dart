@@ -1,19 +1,17 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/connectivity/connectivity_service.dart';
 import '../../../core/db/daos/ride_dao.dart';
 import '../../../core/db/database_helper.dart';
 import '../../../data/models/ride_model.dart';
-import '../../../data/repositories/impl/firebase_ride_repository.dart';
 
 class MyRidesViewModel extends ChangeNotifier {
   MyRidesViewModel() {
-    _repository = FirebaseRideRepository();
     _dao = RideDao(DatabaseHelper());
 
-    // Check current connectivity immediately (not just on change)
     ConnectivityService().isOnline().then((online) {
       isOffline = !online;
       notifyListeners();
@@ -24,16 +22,15 @@ class MyRidesViewModel extends ChangeNotifier {
       isOffline = !online;
       notifyListeners();
 
-      // Auto-refresh when coming back online
       if (online && wasOffline && _lastDriverId != null) {
-        loadRides(_lastDriverId!);
+        _subscribeToRides(_lastDriverId!);
       }
     });
   }
 
-  late final FirebaseRideRepository _repository;
   late final RideDao _dao;
   StreamSubscription<bool>? _connSub;
+  StreamSubscription<QuerySnapshot>? _ridesSub;
 
   String? _lastDriverId;
 
@@ -43,36 +40,57 @@ class MyRidesViewModel extends ChangeNotifier {
   bool isFromCache = false;
   String? errorMessage;
 
-  Future<void> loadRides(String driverId) async {
+  void loadRides(String driverId) {
     _lastDriverId = driverId;
+    _subscribeToRides(driverId);
+  }
+
+  void _subscribeToRides(String driverId) {
+    _ridesSub?.cancel();
+
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
-    try {
-      rides = await _repository.getDriverRides(driverId);
-      unawaited(_dao.insertOrReplaceAll(rides));
-      isFromCache = false;
-    } catch (e) {
-      debugPrint('[MyRides] Firestore failed: $e');
-      final now = DateTime.now();
-      final cached = await _dao.fetchAll();
-      rides = cached
-          .where((r) =>
-              r.driverId == driverId &&
-              (r.departureTime.isAfter(now) || r.status == 'in_progress'))
-          .toList()
-        ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
-      // Only show cache banner if we actually have cached data to show
-      isFromCache = rides.isNotEmpty;
-    } finally {
-      isLoading = false;
-      notifyListeners();
-    }
+    final now = DateTime.now();
+
+    _ridesSub = FirebaseFirestore.instance
+        .collection('rides')
+        .where('driverId', isEqualTo: driverId)
+        .snapshots()
+        .listen(
+      (snap) {
+        rides = snap.docs
+            .map((d) => RideModel.fromMap(d.data(), d.id))
+            .where((r) =>
+                r.departureTime.isAfter(now) || r.status == 'in_progress')
+            .toList()
+          ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
+
+        unawaited(_dao.insertOrReplaceAll(rides));
+        isFromCache = false;
+        isLoading = false;
+        notifyListeners();
+      },
+      onError: (e) async {
+        debugPrint('[MyRides] Firestore stream failed: $e');
+        final cached = await _dao.fetchAll();
+        rides = cached
+            .where((r) =>
+                r.driverId == driverId &&
+                (r.departureTime.isAfter(now) || r.status == 'in_progress'))
+            .toList()
+          ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
+        isFromCache = rides.isNotEmpty;
+        isLoading = false;
+        notifyListeners();
+      },
+    );
   }
 
   @override
   void dispose() {
+    _ridesSub?.cancel();
     _connSub?.cancel();
     super.dispose();
   }
