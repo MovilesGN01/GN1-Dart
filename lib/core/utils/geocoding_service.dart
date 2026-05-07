@@ -90,6 +90,11 @@ class GeocodingService {
               headers: {'User-Agent': 'UniRide/1.0 (university project)'})
           .timeout(const Duration(seconds: 5));
 
+      debugPrint('[Geocoding] status=${response.statusCode} query="$query"');
+      if (response.statusCode == 429) {
+        debugPrint('[Geocoding] rate-limited by Nominatim — wait a minute');
+        return [];
+      }
       if (response.statusCode != 200) return [];
 
       final results = jsonDecode(response.body) as List<dynamic>;

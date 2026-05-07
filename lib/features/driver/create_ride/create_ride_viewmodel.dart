@@ -31,6 +31,8 @@ class CreateRideViewModel extends ChangeNotifier {
   bool isSearchingDestination = false;
 
   StreamSubscription<bool>? _connSub;
+  Timer? _originDebounce;
+  Timer? _destinationDebounce;
 
   CreateRideViewModel() {
     _connSub = ConnectivityService().onStatusChanged.listen((online) {
@@ -41,20 +43,38 @@ class CreateRideViewModel extends ChangeNotifier {
 
   // ── Search ────────────────────────────────────────────────────────────────
 
-  Future<void> searchOrigin(String query) async {
+  void searchOrigin(String query) {
+    _originDebounce?.cancel();
+    if (query.trim().length < 3) {
+      originSuggestions = [];
+      isSearchingOrigin = false;
+      notifyListeners();
+      return;
+    }
     isSearchingOrigin = true;
     notifyListeners();
-    originSuggestions = await GeocodingService.searchPlaces(query);
-    isSearchingOrigin = false;
-    notifyListeners();
+    _originDebounce = Timer(const Duration(milliseconds: 400), () async {
+      originSuggestions = await GeocodingService.searchPlaces(query);
+      isSearchingOrigin = false;
+      notifyListeners();
+    });
   }
 
-  Future<void> searchDestination(String query) async {
+  void searchDestination(String query) {
+    _destinationDebounce?.cancel();
+    if (query.trim().length < 3) {
+      destinationSuggestions = [];
+      isSearchingDestination = false;
+      notifyListeners();
+      return;
+    }
     isSearchingDestination = true;
     notifyListeners();
-    destinationSuggestions = await GeocodingService.searchPlaces(query);
-    isSearchingDestination = false;
-    notifyListeners();
+    _destinationDebounce = Timer(const Duration(milliseconds: 400), () async {
+      destinationSuggestions = await GeocodingService.searchPlaces(query);
+      isSearchingDestination = false;
+      notifyListeners();
+    });
   }
 
   void selectOrigin(PlaceSuggestion place) {
@@ -169,7 +189,8 @@ class CreateRideViewModel extends ChangeNotifier {
         return;
       }
 
-      final cf = FirebaseFunctions.instance.httpsCallable('createRide');
+      final cf = FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable('createRide');
       final result = await cf.call(payload);
       debugPrint('[CreateRide] CF result: ${result.data}');
 
@@ -188,6 +209,8 @@ class CreateRideViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _connSub?.cancel();
+    _originDebounce?.cancel();
+    _destinationDebounce?.cancel();
     super.dispose();
   }
 }

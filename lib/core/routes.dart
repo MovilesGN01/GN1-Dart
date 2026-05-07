@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:uniride/data/models/ride_model.dart';
 import 'package:uniride/data/repositories/impl/firebase_ride_repository.dart';
 import 'package:uniride/features/auth/login_screen.dart';
 import 'package:uniride/features/auth/register_screen.dart';
@@ -16,6 +17,10 @@ import 'package:uniride/features/profile/profile_screen.dart';
 import 'package:uniride/features/rides/available_rides_screen.dart';
 import 'package:uniride/features/driver/create_ride/create_ride_screen.dart';
 import 'package:uniride/features/driver/create_ride/create_ride_viewmodel.dart';
+import 'package:uniride/features/driver/my_rides/driver_ride_detail_screen.dart';
+import 'package:uniride/features/driver/my_rides/driver_ride_detail_viewmodel.dart';
+import 'package:uniride/features/driver/my_rides/my_rides_screen.dart';
+import 'package:uniride/features/driver/my_rides/my_rides_viewmodel.dart';
 import 'package:uniride/features/rides/ride_details_screen.dart';
 import 'package:uniride/features/rides/ride_details_viewmodel.dart';
 
@@ -92,17 +97,32 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/driver/my-rides',
-      builder: (_, __) => const Scaffold(
-          body: Center(child: Text('My Rides'))),
+      builder: (context, state) => ChangeNotifierProvider(
+        create: (_) => MyRidesViewModel(),
+        child: const MyRidesScreen(),
+      ),
+    ),
+    GoRoute(
+      path: '/driver/my-rides/:rideId',
+      builder: (context, state) {
+        final ride = state.extra! as RideModel;
+        return ChangeNotifierProvider(
+          create: (_) => DriverRideDetailViewModel(
+            ride,
+            FirebaseRideRepository(),
+          ),
+          child: const DriverRideDetailScreen(),
+        );
+      },
     ),
     GoRoute(
       path: '/driver/ride-requests',
-      builder: (_, __) => const Scaffold(
+      builder: (context, state) => const Scaffold(
           body: Center(child: Text('Ride Requests'))),
     ),
     GoRoute(
       path: '/driver/active-ride',
-      builder: (_, __) => const Scaffold(
+      builder: (context, state) => const Scaffold(
           body: Center(child: Text('Active Ride'))),
     ),
   ],
