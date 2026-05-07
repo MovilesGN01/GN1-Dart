@@ -880,19 +880,28 @@ class _SearchCardState extends State<_SearchCard> {
     final position = await LocationUtils.getCurrentPosition();
     if (position == null || !mounted) return;
 
-    // Try real reverse geocoding first, fall back to zone name
     final address = await GeocodingService.getAddressFromCoords(
       lat: position.latitude,
       lon: position.longitude,
     );
-    final label = address ??
-        LocationUtils.zoneFromLatLon(position.latitude, position.longitude) ??
-        'Current location';
 
-    if (mounted) {
-      _fromController.text = label;
+    if (!mounted) return;
+
+    if (address != null) {
+      _fromController.text = address;
       setState(() => _gpsAutoFilled = true);
-      debugPrint('[GPS] auto-filled: $label');
+      debugPrint('[GPS] auto-filled: $address');
+    } else {
+      debugPrint('[GPS] reverse geocoding failed — prompting manual entry');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not detect your address. Please enter it manually.',
+            style: GoogleFonts.poppins(color: Colors.white),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'core/connectivity/sync_manager.dart';
 import 'core/routes.dart';
 import 'data/models/weather_model.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
@@ -30,7 +31,9 @@ Future<void> main() async {
   FirebaseFirestore.instance.settings =
       const Settings(persistenceEnabled: false);
 
-  // Fire-and-forget weather prefetch at boot.
+  SyncManager().init();
+
+  // Future + callback — fire-and-forget weather prefetch at boot
   OpenMeteoRepository().fetchCurrentWithCallback(
     onSuccess: (WeatherData data) =>
         debugPrint('[Boot] weather prefetch: ${data.temperature}°C'),

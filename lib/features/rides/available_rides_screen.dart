@@ -10,8 +10,10 @@ import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
+import '../../data/services/ride_ranking_service.dart';
 import '../../features/rides/ride_viewmodel.dart';
 import '../../shared/widgets/location_disabled_banner.dart';
+import '../../shared/widgets/offline_banner.dart';
 
 // ── Local colour palette ──────────────────────────────────────────────────────
 abstract final class _RidesColors {
@@ -45,12 +47,6 @@ String _fmtPrice(double p) {
   }
   return '\$$n';
 }
-
-
-double _rankScore(RideModel r) =>
-    (r.driverRating * 0.5) +
-    (r.punctualityRate * 0.3) +
-    (r.seatsAvailable * 0.2);
 
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -165,7 +161,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   }
 
   // Level 1 — Primary filter (Search button)
-  void _onSearch() {
+  Future<void> _onSearch() async {
     final allRides = context.read<RideViewModel>().rides;
     final from = _fromController.text.trim().toLowerCase();
     final to = _toController.text.trim().toLowerCase();
@@ -188,7 +184,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
         windowEnd = now.add(const Duration(minutes: 30));
     }
 
-    final results = allRides.where((r) {
+    final filtered = allRides.where((r) {
       if (from.isNotEmpty && !r.origin.toLowerCase().contains(from)) return false;
       if (to.isNotEmpty && !r.destination.toLowerCase().contains(to)) return false;
       if (r.departureTime.isBefore(windowStart) || r.departureTime.isAfter(windowEnd)) {
@@ -197,11 +193,15 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
       return true;
     }).toList();
 
-    setState(() {
-      _filteredRides = results;
-      _hasSearched = true;
-      _activeFilter = 'All';
-    });
+    final ranked = await RideRankingService().rankAndFilter(rides: filtered);
+
+    if (mounted) {
+      setState(() {
+        _filteredRides = ranked;
+        _hasSearched = true;
+        _activeFilter = 'All';
+      });
+    }
   }
 
   // Level 2 — Secondary filter (chips), applied on top of _filteredRides
@@ -233,11 +233,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     final now = DateTime.now();
     final upcomingRides = vm.rides.where((r) => r.departureTime.isAfter(now)).toList();
     final sourceList = _hasSearched ? _filteredRides : upcomingRides;
-    List<RideModel> displayed = _applyChipFilter(sourceList);
-    if (_hasSearched) {
-      displayed = List<RideModel>.from(displayed)
-        ..sort((a, b) => _rankScore(b).compareTo(_rankScore(a)));
-    }
+    final List<RideModel> displayed = _applyChipFilter(sourceList);
 
     final sectionHeader = _hasSearched ? 'RECOMMENDED RIDES' : 'AVAILABLE RIDES';
 
@@ -277,6 +273,12 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Consumer<RideViewModel>(
+                builder: (_, vm, _) => OfflineBanner(
+                  isOffline: vm.isOffline,
+                  isFromCache: vm.isFromCache,
+                ),
+              ),
               if (_locationServiceDisabled) const LocationDisabledBanner(),
               if (vm.isOffline) const _CacheOfflineBanner(isOffline: true),
               if (!vm.isOffline && vm.isFromCache)

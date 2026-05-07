@@ -57,9 +57,10 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS pending_operations (
         id TEXT PRIMARY KEY,
-        operation TEXT NOT NULL,
+        type TEXT NOT NULL,
         payload TEXT NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        retry_count INTEGER DEFAULT 0
       )
     ''');
   }
