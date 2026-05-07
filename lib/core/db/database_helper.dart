@@ -19,7 +19,7 @@ class DatabaseHelper {
     final path = join(dir.path, 'uniride.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -46,9 +46,21 @@ class DatabaseHelper {
     ''');
     await db.execute('CREATE INDEX idx_rides_zone ON rides(zone)');
     await db.execute('CREATE INDEX idx_rides_status ON rides(status)');
+    await _createPendingOperationsTable(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Future migrations go here.
+    if (oldVersion < 2) await _createPendingOperationsTable(db);
+  }
+
+  Future<void> _createPendingOperationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pending_operations (
+        id TEXT PRIMARY KEY,
+        operation TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    ''');
   }
 }

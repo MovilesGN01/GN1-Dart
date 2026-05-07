@@ -14,6 +14,8 @@ import 'package:uniride/features/home/home_screen.dart';
 import 'package:uniride/features/nfc/nfc_access_screen.dart';
 import 'package:uniride/features/profile/profile_screen.dart';
 import 'package:uniride/features/rides/available_rides_screen.dart';
+import 'package:uniride/features/driver/create_ride/create_ride_screen.dart';
+import 'package:uniride/features/driver/create_ride/create_ride_viewmodel.dart';
 import 'package:uniride/features/rides/ride_details_screen.dart';
 import 'package:uniride/features/rides/ride_details_viewmodel.dart';
 
@@ -83,8 +85,10 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/driver/create-ride',
-      builder: (_, __) => const Scaffold(
-          body: Center(child: Text('Create Ride'))),
+      builder: (context, state) => ChangeNotifierProvider(
+        create: (_) => CreateRideViewModel(),
+        child: const CreateRideScreen(),
+      ),
     ),
     GoRoute(
       path: '/driver/my-rides',
