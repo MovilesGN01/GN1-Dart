@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/connectivity/connectivity_service.dart';
+import '../../../core/location_utils.dart';
 import '../../../shared/widgets/offline_banner.dart';
 
 class ActiveRideScreen extends StatefulWidget {
@@ -58,17 +60,39 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
   Future<void> _finishRide() async {
     setState(() => _isLoading = true);
     try {
-      await FirebaseFunctions.instance
-          .httpsCallable('finishRide')
-          .call({'rideId': widget.rideId});
-      // Navigation is handled by _rideSub reacting to status → completed
+      // Get current GPS location to validate proximity to destination
+      final Position? position = await LocationUtils.getCurrentPosition();
+
+      await FirebaseFunctions.instance.httpsCallable('finishRide').call({
+        'rideId': widget.rideId,
+        if (position != null) 'driverLat': position.latitude,
+        if (position != null) 'driverLng': position.longitude,
+      });
+      // Navigation handled by _rideSub reacting to status → completed
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[ActiveRide] finishRide error: ${e.message}');
+      if (mounted) {
+        final message = e.message ?? 'No se pudo finalizar el viaje.';
+        // Surface distance error clearly; generic fallback for other errors
+        final isLocationError = message.contains('500m') ||
+            message.contains('destination');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isLocationError
+                  ? message
+                  : 'No se pudo finalizar el viaje. Intenta de nuevo.',
+            ),
+            duration: Duration(seconds: isLocationError ? 5 : 3),
+          ),
+        );
+      }
     } catch (e) {
-      debugPrint('[ActiveRide] finishRide error: $e');
+      debugPrint('[ActiveRide] finishRide unexpected error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se pudo finalizar el viaje. Intenta de nuevo.'),
-          ),
+              content: Text('No se pudo finalizar el viaje. Intenta de nuevo.')),
         );
       }
     } finally {

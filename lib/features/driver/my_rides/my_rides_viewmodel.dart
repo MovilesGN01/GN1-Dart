@@ -32,7 +32,9 @@ class MyRidesViewModel extends ChangeNotifier {
   late final RideDao _dao;
   StreamSubscription<bool>? _connSub;
   StreamSubscription<QuerySnapshot>? _ridesSub;
+  StreamSubscription<QuerySnapshot>? _requestsSub;
   final Set<String> _expiringRides = {};
+  final Map<String, int> _pendingCounts = {};
 
   String? _lastDriverId;
 
@@ -41,6 +43,8 @@ class MyRidesViewModel extends ChangeNotifier {
   bool isOffline = false;
   bool isFromCache = false;
   String? errorMessage;
+
+  int pendingCountFor(String rideId) => _pendingCounts[rideId] ?? 0;
 
   void loadRides(String driverId) {
     _lastDriverId = driverId;
@@ -93,6 +97,7 @@ class MyRidesViewModel extends ChangeNotifier {
         unawaited(_dao.insertOrReplaceAll(rides));
         isFromCache = false;
         isLoading = false;
+        _subscribeToPendingRequests(rides.map((r) => r.id).toList());
         notifyListeners();
       },
       onError: (e) async {
@@ -115,9 +120,38 @@ class MyRidesViewModel extends ChangeNotifier {
     );
   }
 
+  void _subscribeToPendingRequests(List<String> rideIds) {
+    _requestsSub?.cancel();
+    _pendingCounts.clear();
+    if (rideIds.isEmpty) {
+      notifyListeners();
+      return;
+    }
+    // Firestore whereIn limit is 30; drivers won't exceed that in practice
+    final ids = rideIds.take(30).toList();
+    _requestsSub = FirebaseFirestore.instance
+        .collection('rideRequests')
+        .where('rideId', whereIn: ids)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .listen((snap) {
+          _pendingCounts.clear();
+          for (final doc in snap.docs) {
+            final rideId = doc.data()['rideId'] as String?;
+            if (rideId != null) {
+              _pendingCounts[rideId] = (_pendingCounts[rideId] ?? 0) + 1;
+            }
+          }
+          notifyListeners();
+        }, onError: (e) {
+          debugPrint('[MyRides] pending requests stream error: $e');
+        });
+  }
+
   @override
   void dispose() {
     _ridesSub?.cancel();
+    _requestsSub?.cancel();
     _connSub?.cancel();
     super.dispose();
   }

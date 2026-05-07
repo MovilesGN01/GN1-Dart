@@ -173,13 +173,14 @@ class _RideDriverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final vm = context.read<MyRidesViewModel>();
     final isPending = ride.status == 'pending';
     final canNavigate = !isPending;
-    final showActiveRide =
-        ride.status == 'available' || ride.status == 'in_progress';
+    final showActiveRide = ride.status == 'in_progress';
     final now = DateTime.now();
     final isOverdue = (ride.status == 'available' || ride.status == 'active') &&
         ride.departureTime.isBefore(now);
+    final pendingCount = vm.pendingCountFor(ride.id);
 
     return GestureDetector(
       onTap: () async {
@@ -287,6 +288,34 @@ class _RideDriverCard extends StatelessWidget {
           Row(
             children: [
               _StatusChip(status: ride.status, isOverdue: isOverdue),
+              if (pendingCount > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFCD34D)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.person_add_alt_1,
+                          size: 11, color: Color(0xFF92400E)),
+                      const SizedBox(width: 3),
+                      Text(
+                        '$pendingCount solicitud${pendingCount > 1 ? 'es' : ''}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF92400E),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
 

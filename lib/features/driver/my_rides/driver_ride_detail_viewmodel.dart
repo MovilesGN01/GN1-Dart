@@ -36,6 +36,27 @@ class DriverRideDetailViewModel extends ChangeNotifier {
 
   bool get canEdit => _ride.status == 'available' || _ride.status == 'active';
 
+  // True only within the 30-min-before to 15-min-after window
+  bool get canStart {
+    if (!canEdit) return false;
+    final now = DateTime.now();
+    final windowOpen = _ride.departureTime.subtract(const Duration(minutes: 30));
+    final windowClose = _ride.departureTime.add(const Duration(minutes: 15));
+    return now.isAfter(windowOpen) && now.isBefore(windowClose);
+  }
+
+  // Hint shown when canEdit but canStart is false (too early)
+  String? get startRideHint {
+    if (!canEdit) return null;
+    final now = DateTime.now();
+    final windowOpen = _ride.departureTime.subtract(const Duration(minutes: 30));
+    if (now.isBefore(windowOpen)) {
+      final mins = windowOpen.difference(now).inMinutes + 1;
+      return 'Podrás iniciar el viaje en $mins min';
+    }
+    return null;
+  }
+
   void startEditing() {
     _originCtrl.text = _ride.origin;
     _destCtrl.text = _ride.destination;

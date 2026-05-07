@@ -50,6 +50,20 @@ class DriverRideDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.watch<DriverRideDetailViewModel>();
 
+    // Navigate to active ride as soon as status flips to in_progress.
+    // Done here (not inside _DetailView) because _DetailView is swapped
+    // for a spinner while isLoading=true, making its context unmounted.
+    if (vm.ride.status == 'in_progress' && !vm.isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          context.pushReplacement(
+            '/driver/active-ride',
+            extra: {'rideId': vm.ride.id},
+          );
+        }
+      });
+    }
+
     return PopScope(
       canPop: !vm.isEditing,
       onPopInvokedWithResult: (didPop, _) {
@@ -316,37 +330,49 @@ class _DetailView extends StatelessWidget {
 
           if (vm.canEdit) ...[
             const SizedBox(height: 24),
+            if (vm.startRideHint != null) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.schedule, size: 14, color: _C.muted),
+                  const SizedBox(width: 4),
+                  Text(
+                    vm.startRideHint!,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: _C.muted,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                icon: Icon(
+                  Icons.play_arrow_rounded,
+                  color: vm.canStart ? Colors.white : _C.muted,
+                ),
                 label: Text(
                   'Start Ride',
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: vm.canStart ? Colors.white : _C.muted,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _C.green,
+                  backgroundColor: vm.canStart ? _C.green : _C.border,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: vm.isLoading
+                onPressed: (vm.isLoading || !vm.canStart)
                     ? null
-                    : () async {
-                        final started = await vm.startRide();
-                        if (started && context.mounted) {
-                          context.pushReplacement(
-                            '/driver/active-ride',
-                            extra: {'rideId': vm.ride.id},
-                          );
-                        }
-                      },
+                    : () => vm.startRide(),
               ),
             ),
           ],

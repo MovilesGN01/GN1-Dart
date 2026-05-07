@@ -370,6 +370,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
 // ── Private widgets ──────────────────────────────────────────────────────────
 
+String _greeting() {
+  final hour = DateTime.now().hour;
+  if (hour < 12) return 'Good morning,';
+  if (hour < 18) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({required this.firstName});
 
@@ -386,7 +393,7 @@ class _HomeHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Good morning,',
+                  _greeting(),
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w400,
