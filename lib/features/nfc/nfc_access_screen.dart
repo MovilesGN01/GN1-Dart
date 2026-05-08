@@ -70,6 +70,7 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
     final tagType = prefs.getString(_kPendingTagType) ?? 'unknown';
     final tagStandard = prefs.getString(_kPendingTagStandard) ?? 'unknown';
 
+    if (!mounted) return;
     setState(() {
       _lastScan = NfcScanResult(
         id: tagId,
@@ -81,9 +82,8 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
           'Hay una verificación pendiente. Se sincronizará al reconectar.';
     });
 
-    // If already online, sync immediately.
     final online = await ConnectivityService.instance.isOnline;
-    if (online) _retrySyncPendingTag();
+    if (online && mounted) _retrySyncPendingTag();
   }
 
   Future<void> _startScan() async {
@@ -94,11 +94,14 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
 
     try {
       final result = await _service.scan();
+      if (!mounted) return;
 
       final online = await ConnectivityService.instance.isOnline;
+      if (!mounted) return;
 
       if (!online) {
         await _savePendingTag(result);
+        if (!mounted) return;
         setState(() {
           _lastScan = result;
           _status = _NfcStatus.pendingSync;
@@ -110,6 +113,7 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
 
       final isAuthorized =
           await _verificationService.verifyTag(result.id.toUpperCase());
+      if (!mounted) return;
 
       setState(() {
         _lastScan = result;
@@ -120,6 +124,7 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
             : 'Tag no autorizado para este acceso.';
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _status = _NfcStatus.error;
         _statusMessage = e.toString().replaceFirst('Exception: ', '');
@@ -132,6 +137,7 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
     final tagId = prefs.getString(_kPendingTagKey);
     if (tagId == null || tagId.isEmpty || _isSyncing) return;
 
+    if (!mounted) return;
     setState(() => _isSyncing = true);
 
     try {
@@ -139,6 +145,7 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
           await _verificationService.verifyTag(tagId.toUpperCase());
 
       await _clearPendingTag(prefs);
+      if (!mounted) return;
 
       setState(() {
         _isSyncing = false;
@@ -149,6 +156,7 @@ class _NfcAccessScreenState extends State<NfcAccessScreen> {
             : 'Tag no autorizado para este acceso.';
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isSyncing = false;
         _status = _NfcStatus.pendingSync;

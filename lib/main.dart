@@ -2,8 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'core/connectivity/sync_manager.dart';
+import 'core/storage/recent_search_box.dart';
 import 'core/routes.dart';
 import 'data/models/weather_model.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
@@ -14,11 +17,15 @@ import 'features/auth/auth_viewmodel.dart';
 import 'features/chatbot/data/chatbot_service.dart';
 import 'features/chatbot/state/chatbot_controller.dart';
 import 'features/home/weather_viewmodel.dart';
+import 'features/notifications/notifications_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Hive.initFlutter();
+  await RecentSearchBox.init();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
@@ -29,7 +36,9 @@ Future<void> main() async {
   FirebaseFirestore.instance.settings =
       const Settings(persistenceEnabled: false);
 
-  // Fire-and-forget weather prefetch at boot.
+  SyncManager().init();
+
+  // Future + callback — fire-and-forget weather prefetch at boot
   OpenMeteoRepository().fetchCurrentWithCallback(
     onSuccess: (WeatherData data) =>
         debugPrint('[Boot] weather prefetch: ${data.temperature}°C'),
@@ -60,6 +69,9 @@ class UniRideBootstrap extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => WeatherViewModel(OpenMeteoRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => NotificationsViewModel(),
         ),
       ],
       child: const UniRideApp(),

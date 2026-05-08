@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/connectivity/connectivity_service.dart';
@@ -13,15 +14,29 @@ class AuthViewModel extends ChangeNotifier {
 
   AuthViewModel(this._repository) {
     _setupConnectivityListener();
+    _setupAuthStateListener();
   }
 
   StreamSubscription<bool>? _connectivitySub;
+  StreamSubscription<User?>? _authStateSub;
   bool isOffline = false;
 
   void _setupConnectivityListener() {
     _connectivitySub = ConnectivityService().onStatusChanged.listen((isOnline) {
       isOffline = !isOnline;
       notifyListeners();
+    });
+  }
+
+  void _setupAuthStateListener() {
+    _authStateSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user != null && _currentUser == null) {
+        _currentUser = await _repository.getUserProfile(user.uid);
+        notifyListeners();
+      } else if (user == null) {
+        _currentUser = null;
+        notifyListeners();
+      }
     });
   }
 
@@ -33,6 +48,7 @@ class AuthViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _connectivitySub?.cancel();
+    _authStateSub?.cancel();
     super.dispose();
   }
 
@@ -40,11 +56,26 @@ class AuthViewModel extends ChangeNotifier {
   String? _errorMessage;
   UserModel? _currentUser;
   List<Map<String, dynamic>> _recurringRoutes = [];
+  String _activeMode = 'passenger';
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   UserModel? get currentUser => _currentUser;
   List<Map<String, dynamic>> get recurringRoutes => _recurringRoutes;
+  String get activeMode => _activeMode;
+
+  void setActiveMode(String mode) {
+    _activeMode = mode;
+    notifyListeners();
+  }
+
+  Future<void> refreshCurrentUser() async {
+    final uid = await _repository.getCurrentUserId();
+    if (uid != null) {
+      _currentUser = await _repository.getUserProfile(uid);
+      notifyListeners();
+    }
+  }
 
   Future<bool> signIn(String email, String password) async {
     _isLoading = true;

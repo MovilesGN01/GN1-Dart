@@ -26,4 +26,28 @@ class ChatMessage {
       status: status ?? this.status,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'isUser': isUser,
+        'createdAt': createdAt.millisecondsSinceEpoch,
+        'status': status.name,
+      };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    return ChatMessage(
+      id: json['id'] as String?,
+      text: json['text'] as String? ?? '',
+      isUser: json['isUser'] as bool? ?? false,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        (json['createdAt'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch,
+      ),
+      status: ChatMessageStatus.values.firstWhere(
+        (s) => s.name == json['status'],
+        orElse: () => ChatMessageStatus.sent,
+      ),
+    );
+  }
 }

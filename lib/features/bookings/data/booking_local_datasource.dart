@@ -83,6 +83,18 @@ class BookingLocalDatasource {
     );
   }
 
+  Future<Map<String, dynamic>?> getCachedBookingById(String bookingId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'bookings',
+      where: 'id = ?',
+      whereArgs: [bookingId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
   Future<String> insertPendingBooking({
     required String rideId,
     required String userId,
