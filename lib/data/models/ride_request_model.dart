@@ -8,6 +8,7 @@ class RideRequestModel {
   final double passengerRating;
   final String status;
   final DateTime requestTime;
+  final String? passengerPhotoUrl;
 
   const RideRequestModel({
     required this.id,
@@ -17,6 +18,7 @@ class RideRequestModel {
     required this.passengerRating,
     required this.status,
     required this.requestTime,
+    this.passengerPhotoUrl,
   });
 
   factory RideRequestModel.fromFirestore(DocumentSnapshot doc) {
@@ -38,6 +40,20 @@ class RideRequestModel {
           0.0,
       status: (data['status'] as String?) ?? 'pending',
       requestTime: time,
+      passengerPhotoUrl: data['passengerPhotoUrl'] as String?,
+    );
+  }
+
+  RideRequestModel copyWith({String? passengerPhotoUrl}) {
+    return RideRequestModel(
+      id: id,
+      rideId: rideId,
+      passengerId: passengerId,
+      passengerName: passengerName,
+      passengerRating: passengerRating,
+      status: status,
+      requestTime: requestTime,
+      passengerPhotoUrl: passengerPhotoUrl ?? this.passengerPhotoUrl,
     );
   }
 }

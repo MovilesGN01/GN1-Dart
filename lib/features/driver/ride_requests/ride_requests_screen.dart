@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -105,6 +106,42 @@ class _RideRequestsScreenState extends State<RideRequestsScreen> {
   }
 }
 
+class _PassengerAvatar extends StatelessWidget {
+  const _PassengerAvatar({required this.photoUrl, required this.initial});
+
+  final String? photoUrl;
+  final String initial;
+
+  @override
+  Widget build(BuildContext context) {
+    if (photoUrl != null && photoUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: 20,
+        backgroundColor: const Color(0xFFE5E7EB),
+        child: ClipOval(
+          child: CachedNetworkImage(
+            imageUrl: photoUrl!,
+            width: 40,
+            height: 40,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            errorWidget: (_, __, ___) => const Icon(Icons.person, size: 20),
+          ),
+        ),
+      );
+    }
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: const Color(0xFF1F5DFF),
+      child: Icon(Icons.person, color: Colors.white, size: 20),
+    );
+  }
+}
+
 class _RequestCard extends StatelessWidget {
   const _RequestCard({required this.request, required this.vm});
 
@@ -148,15 +185,9 @@ class _RequestCard extends StatelessWidget {
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: const Color(0xFF1F5DFF),
-          child: Text(
-            initial.toUpperCase(),
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+        leading: _PassengerAvatar(
+          photoUrl: request.passengerPhotoUrl,
+          initial: initial,
         ),
         title: Text(
           request.passengerName,

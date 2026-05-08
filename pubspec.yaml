@@ -39,6 +39,8 @@ dependencies:
   path: ^1.9.0                   # Required by sqflite (join paths)
   shared_preferences: ^2.3.2     # session_user_id, last_weather,
   # last sync timestamp
+  hive: ^2.2.3                   # Key-value store: recent searches
+  hive_flutter: ^1.1.0           # Hive Flutter init + adapters
 
   # ── Connectivity (Sprint 3) ──────────────────────────────────
   connectivity_plus: ^6.0.5      # Stream<bool> online/offline

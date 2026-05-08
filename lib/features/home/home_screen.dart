@@ -1379,20 +1379,7 @@ class _ExploreAlternatives extends StatelessWidget {
                 icon: Icons.directions_bus,
                 title: 'University Bus',
                 subtitle: 'Official campus\nbus routes',
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Coming soon',
-                      style: GoogleFonts.poppins(color: Colors.white),
-                    ),
-                    backgroundColor: _HomeColors.primary,
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
+                onPressed: () => context.go('/transport'),
               ),
               _AlternativeCard(
                 icon: Icons.directions_walk,
