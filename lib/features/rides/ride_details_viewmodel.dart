@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/connectivity_service.dart';
 import '../../data/models/ride_details_model.dart';
+import '../../data/repositories/impl/firebase_ride_repository.dart';
 import '../../data/repositories/ride_repository.dart';
 import '../bookings/data/booking_repository.dart';
 
@@ -16,21 +17,39 @@ class RideDetailsViewModel extends ChangeNotifier {
   bool _isLoading = false;
   bool _isReserving = false;
   bool _reservedOffline = false;
+  bool _isFromCache = false;
+  bool _isOffline = false;
   String? _errorMessage;
 
   RideDetailsModel? get ride => _ride;
   bool get isLoading => _isLoading;
   bool get isReserving => _isReserving;
   bool get reservedOffline => _reservedOffline;
+  bool get isFromCache => _isFromCache;
+  bool get isOffline => _isOffline;
   String? get errorMessage => _errorMessage;
 
-  Future<void> load(String rideId) async {
+  Future<void> load(String rideId, {bool forceRefresh = false}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _ride = await _repository.getRideDetails(rideId);
+      final repo = _repository;
+      if (repo is FirebaseRideRepository) {
+        _ride = await repo.getRideDetailsWithFallback(
+          rideId,
+          forceRefresh: forceRefresh,
+          onCacheStatus: (fromCache) {
+            _isFromCache = fromCache;
+            _isOffline = fromCache;
+          },
+        );
+      } else {
+        _ride = await _repository.getRideDetails(rideId);
+        _isFromCache = false;
+        _isOffline = false;
+      }
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
@@ -54,8 +73,7 @@ class RideDetailsViewModel extends ChangeNotifier {
   Future<void> refresh() async {
     final currentRideId = _ride?.id;
     if (currentRideId == null || currentRideId.isEmpty) return;
-
-    await load(currentRideId);
+    await load(currentRideId, forceRefresh: true);
   }
 
   Future<bool> reserve() async {

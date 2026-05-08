@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -7,10 +9,13 @@ import '../data/booking_repository.dart';
 import '../models/booking_model.dart';
 
 class MyBookingsViewModel extends ChangeNotifier {
-  MyBookingsViewModel(this._bookingRepository, this._rideRepository);
+  MyBookingsViewModel(this._bookingRepository, this._rideRepository) {
+    _setupConnectivityListener();
+  }
 
   final BookingRepository _bookingRepository;
   final RideRepository _rideRepository;
+  StreamSubscription<bool>? _connectivitySub;
 
   bool _isLoading = false;
   bool _isSyncing = false;
@@ -25,6 +30,25 @@ class MyBookingsViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   List<BookingModel> get bookings => _bookings;
   int get pendingCount => _pendingCount;
+
+  void _setupConnectivityListener() {
+    _connectivitySub =
+        ConnectivityService().onStatusChanged.listen((online) {
+      final wasOffline = _isOffline;
+      _isOffline = !online;
+      if (online && (wasOffline || _pendingCount > 0)) {
+        load();
+      } else {
+        notifyListeners();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
 
   Future<void> load() async {
     final user = FirebaseAuth.instance.currentUser;

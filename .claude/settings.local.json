@@ -5,7 +5,8 @@
       "Bash(flutter pub *)",
       "Bash(flutter analyze *)",
       "Bash(flutter build *)",
-      "Bash(curl -s \"https://raw.githubusercontent.com/MovilesGN01/GN1-Dart/develop/lib/features/rides/available_rides_screen.dart\")"
+      "Bash(curl -s \"https://raw.githubusercontent.com/MovilesGN01/GN1-Dart/develop/lib/features/rides/available_rides_screen.dart\")",
+      "Bash(git fetch *)"
     ]
   }
 }

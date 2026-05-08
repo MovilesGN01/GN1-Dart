@@ -36,10 +36,16 @@ class BookingRepository {
   }
 
   Future<BookingModel> getBookingById(String bookingId) async {
-    final doc =
-        await _firestore.collection('rideRequests').doc(bookingId).get();
-    if (!doc.exists) throw Exception('No se encontró la reserva.');
-    return BookingModel.fromDoc(doc);
+    try {
+      final doc =
+          await _firestore.collection('rideRequests').doc(bookingId).get();
+      if (!doc.exists) throw Exception('No se encontró la reserva.');
+      return BookingModel.fromDoc(doc);
+    } catch (_) {
+      final cached = await _local.getCachedBookingById(bookingId);
+      if (cached != null) return BookingModel.fromSqliteRow(cached);
+      rethrow;
+    }
   }
 
   Future<String> savePendingBooking({

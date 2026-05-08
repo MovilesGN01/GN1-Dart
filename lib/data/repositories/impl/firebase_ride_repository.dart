@@ -9,16 +9,23 @@ import '../../../core/db/database_helper.dart';
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
 import '../ride_repository.dart';
+import 'ride_details_store.dart';
 
 class FirebaseRideRepository implements RideRepository {
-  FirebaseRideRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance {
+  FirebaseRideRepository({
+    FirebaseFirestore? firestore,
+    RideDetailsStore? detailsStore,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _detailsStore = detailsStore ?? RideDetailsStore() {
     _dao = RideDao(DatabaseHelper());
   }
 
   final FirebaseFirestore _firestore;
   final LRUCache<String, List<RideModel>> _lruCache =
       LRUCache(capacity: 50);
+  final LRUCache<String, RideDetailsModel> _detailsCache =
+      LRUCache(capacity: 30);
+  final RideDetailsStore _detailsStore;
   late final RideDao _dao;
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -31,14 +38,8 @@ class FirebaseRideRepository implements RideRepository {
           .where('status', isEqualTo: 'available')
           .get();
 
-      return snapshot.docs.map((doc) {
-        try {
-          return RideModel.fromMap(doc.data(), doc.id);
-        } catch (e) {
-          debugPrint('ERROR mapping doc ${doc.id}: $e');
-          rethrow;
-        }
-      }).toList();
+      final raw = snapshot.docs.map(_sanitizeForIsolate).toList();
+      return compute(_parseRidesInIsolate, raw);
     } catch (e) {
       debugPrint('ERROR in getAvailableRides: $e');
       rethrow;
@@ -96,6 +97,38 @@ class FirebaseRideRepository implements RideRepository {
 
   void invalidateRideCache() => _lruCache.invalidateAll();
 
+  /// Online-first details fetch with LRU + persisted store fallback.
+  /// Calls [onCacheStatus] with `true` when the data shown comes from cache.
+  Future<RideDetailsModel> getRideDetailsWithFallback(
+    String rideId, {
+    bool forceRefresh = false,
+    void Function(bool isFromCache)? onCacheStatus,
+  }) async {
+    if (!forceRefresh) {
+      final memHit = _detailsCache.get(rideId);
+      if (memHit != null) {
+        onCacheStatus?.call(false);
+        return memHit;
+      }
+    }
+
+    try {
+      final fresh = await getRideDetails(rideId);
+      _detailsCache.put(rideId, fresh);
+      unawaited(_detailsStore.write(fresh));
+      onCacheStatus?.call(false);
+      return fresh;
+    } catch (e) {
+      final persisted = await _detailsStore.read(rideId);
+      if (persisted != null) {
+        _detailsCache.put(rideId, persisted);
+        onCacheStatus?.call(true);
+        return persisted;
+      }
+      rethrow;
+    }
+  }
+
   @override
   Future<RideDetailsModel> getRideDetails(String rideId) async {
     final rideDoc = await _firestore.collection('rides').doc(rideId).get();
@@ -107,15 +140,6 @@ class FirebaseRideRepository implements RideRepository {
     final rideData = rideDoc.data()!;
     final rawDriverId = (rideData['driverId'] as String?) ?? '';
     final driverId = _normalizeDriverId(rawDriverId);
-
-    Map<String, dynamic> driverData = {};
-    if (driverId.isNotEmpty) {
-      final driverDoc =
-          await _firestore.collection('users').doc(driverId).get();
-      if (driverDoc.exists && driverDoc.data() != null) {
-        driverData = driverDoc.data()!;
-      }
-    }
 
     final departureTime =
         _readDateTime(rideData['departureTime']) ?? DateTime.now();
@@ -193,6 +217,7 @@ class FirebaseRideRepository implements RideRepository {
     });
 
     invalidateRideCache();
+    _detailsCache.invalidate(rideId);
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
@@ -224,4 +249,24 @@ class FirebaseRideRepository implements RideRepository {
     }
     return null;
   }
+
+  Map<String, dynamic> _sanitizeForIsolate(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = Map<String, dynamic>.from(doc.data());
+    data.updateAll((_, v) => v is Timestamp ? v.toDate() : v);
+    data['__id'] = doc.id;
+    return data;
+  }
+}
+
+/// Isolate entry point. Parses raw documents into [RideModel] instances off
+/// the UI thread to keep large rides batches from jank-ing the main thread.
+List<RideModel> _parseRidesInIsolate(List<Map<String, dynamic>> rawDocs) {
+  final out = <RideModel>[];
+  for (final data in rawDocs) {
+    final id = data.remove('__id') as String? ?? '';
+    out.add(RideModel.fromMap(data, id));
+  }
+  return out;
 }
