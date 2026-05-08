@@ -50,11 +50,11 @@ class RideRankingService {
     );
 
     if (rides.length < _threshold) {
-      debugPrint('[Ranking] sync path — ${rides.length} rides');
+      debugPrint('[Ranking] sync path for ${rides.length} rides');
       return _rankAndFilterIsolate(input);
     }
 
-    debugPrint('[Ranking] isolate path — ${rides.length} rides');
+    debugPrint('[Ranking] using isolate for ${rides.length} rides');
     return Isolate.run(() => _rankAndFilterIsolate(input));
   }
 }

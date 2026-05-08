@@ -158,8 +158,8 @@ class RideViewModel extends ChangeNotifier {
   /// Kept for backward compatibility — callers can still use this to force
   /// a fresh subscription (e.g. after coming back online).
   Future<void> invalidateAndReload() async {
-    if (_repository is FirebaseRideRepository) {
-      (_repository as FirebaseRideRepository).invalidateRideCache();
+    if (_repository case final FirebaseRideRepository repo) {
+      repo.invalidateRideCache();
     }
     loadAvailableRides();
   }

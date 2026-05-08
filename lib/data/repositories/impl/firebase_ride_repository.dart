@@ -10,16 +10,23 @@ import '../../../core/db/database_helper.dart';
 import '../../models/ride_details_model.dart';
 import '../../models/ride_model.dart';
 import '../ride_repository.dart';
+import 'ride_details_store.dart';
 
 class FirebaseRideRepository implements RideRepository {
-  FirebaseRideRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance {
+  FirebaseRideRepository({
+    FirebaseFirestore? firestore,
+    RideDetailsStore? detailsStore,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _detailsStore = detailsStore ?? RideDetailsStore() {
     _dao = RideDao(DatabaseHelper());
   }
 
   final FirebaseFirestore _firestore;
   final LRUCache<String, List<RideModel>> _lruCache =
       LRUCache(capacity: 50);
+  final LRUCache<String, RideDetailsModel> _detailsCache =
+      LRUCache(capacity: 30);
+  final RideDetailsStore _detailsStore;
   late final RideDao _dao;
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -58,7 +65,8 @@ class FirebaseRideRepository implements RideRepository {
         .toList();
   }
 
-  /// Online-first with LRU → SQLite fallback.
+  /// Online-first with LRU → SQLite fallback. Parses Firestore documents
+  /// off the UI thread via [compute] to keep large batches jank-free.
   Future<List<RideModel>> getAvailableRidesWithFallback({
     bool forceRefresh = false,
     void Function(bool isFromCache)? onCacheStatus,
@@ -76,7 +84,7 @@ class FirebaseRideRepository implements RideRepository {
     }
 
     try {
-      final rides = await getAvailableRides();
+      final rides = await _getAvailableRidesParallel();
       _lruCache.put(key, rides);
       unawaited(_dao.insertOrReplaceAll(rides));
       debugPrint('[Repo] Firestore ok — ${rides.length} rides');
@@ -229,9 +237,63 @@ class FirebaseRideRepository implements RideRepository {
     });
 
     invalidateRideCache();
+    _detailsCache.invalidate(rideId);
+  }
+
+  /// Online-first details fetch with LRU + persisted store fallback.
+  /// Calls [onCacheStatus] with `true` when the data shown comes from cache.
+  Future<RideDetailsModel> getRideDetailsWithFallback(
+    String rideId, {
+    bool forceRefresh = false,
+    void Function(bool isFromCache)? onCacheStatus,
+  }) async {
+    if (!forceRefresh) {
+      final memHit = _detailsCache.get(rideId);
+      if (memHit != null) {
+        onCacheStatus?.call(false);
+        return memHit;
+      }
+    }
+
+    try {
+      final fresh = await getRideDetails(rideId);
+      _detailsCache.put(rideId, fresh);
+      unawaited(_detailsStore.write(fresh));
+      onCacheStatus?.call(false);
+      return fresh;
+    } catch (e) {
+      final persisted = await _detailsStore.read(rideId);
+      if (persisted != null) {
+        _detailsCache.put(rideId, persisted);
+        onCacheStatus?.call(true);
+        return persisted;
+      }
+      rethrow;
+    }
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  /// Variant of [getAvailableRides] that ships parsing to a background isolate
+  /// via [compute]. Used by [getAvailableRidesWithFallback] for warm caches.
+  Future<List<RideModel>> _getAvailableRidesParallel() async {
+    final snapshot = await _firestore
+        .collection('rides')
+        .where('status', whereIn: ['available', 'active'])
+        .get();
+
+    final raw = snapshot.docs.map(_sanitizeForIsolate).toList();
+    return compute(_parseRidesInIsolate, raw);
+  }
+
+  Map<String, dynamic> _sanitizeForIsolate(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = Map<String, dynamic>.from(doc.data());
+    data.updateAll((_, v) => v is Timestamp ? v.toDate() : v);
+    data['__id'] = doc.id;
+    return data;
+  }
 
   String _normalizeDriverId(String raw) {
     if (raw.isEmpty) return '';
@@ -260,4 +322,15 @@ class FirebaseRideRepository implements RideRepository {
     }
     return null;
   }
+}
+
+/// Isolate entry point. Parses raw documents into [RideModel] instances off
+/// the UI thread to keep large rides batches from jank-ing the main thread.
+List<RideModel> _parseRidesInIsolate(List<Map<String, dynamic>> rawDocs) {
+  final out = <RideModel>[];
+  for (final data in rawDocs) {
+    final id = data.remove('__id') as String? ?? '';
+    out.add(RideModel.fromMap(data, id));
+  }
+  return out;
 }
