@@ -26,6 +26,7 @@ import 'package:uniride/features/driver/ride_requests/ride_requests_screen.dart'
 import 'package:uniride/features/driver/ride_requests/ride_requests_viewmodel.dart';
 import 'package:uniride/features/rides/ride_details_screen.dart';
 import 'package:uniride/features/rides/ride_details_viewmodel.dart';
+import 'package:uniride/features/transport/transport_info_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -139,6 +140,10 @@ final appRouter = GoRouter(
         final rideId = (extra?['rideId'] as String?) ?? '';
         return ActiveRideScreen(rideId: rideId);
       },
+    ),
+    GoRoute(
+      path: '/transport',
+      builder: (context, state) => const TransportInfoScreen(),
     ),
   ],
 );

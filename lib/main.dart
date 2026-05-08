@@ -2,9 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'core/connectivity/sync_manager.dart';
+import 'core/storage/recent_search_box.dart';
 import 'core/routes.dart';
 import 'data/models/weather_model.dart';
 import 'data/repositories/impl/firebase_auth_repository.dart';
@@ -21,6 +23,9 @@ import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Hive.initFlutter();
+  await RecentSearchBox.init();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:uniride/core/storage/recent_search_box.dart';
 import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 import '../../core/location_utils.dart';
@@ -69,6 +70,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   List<RideModel> _filteredRides = [];
   bool _hasSearched = false;
   bool _pendingAutoSearch = false;
+  List<({String origin, String destination})> _recentSearches = [];
 
   static const _departureOptions = ['Now', 'In 30 min', 'In 1 hour', 'In 2 hours'];
 
@@ -79,6 +81,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     _toController = TextEditingController();
     _fromController.addListener(_onFromChanged);
     _toController.addListener(_onToChanged);
+    _loadRecentSearches();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Pre-fill FROM/TO from query parameters passed by home screen
       final params = GoRouterState.of(context).uri.queryParameters;
@@ -113,6 +116,13 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     _fromController.dispose();
     _toController.dispose();
     super.dispose();
+  }
+
+  void _loadRecentSearches() {
+    final searches = RecentSearchBox.getAll().take(3).map(
+      (s) => (origin: s.origin, destination: s.destination),
+    ).toList();
+    setState(() => _recentSearches = searches);
   }
 
   void _onFromChanged() {
@@ -165,6 +175,11 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     final allRides = context.read<RideViewModel>().rides;
     final from = _fromController.text.trim().toLowerCase();
     final to = _toController.text.trim().toLowerCase();
+
+    if (from.isNotEmpty && to.isNotEmpty) {
+      RecentSearchBox.save(from, to);
+      _loadRecentSearches();
+    }
     final now = DateTime.now();
 
     DateTime windowStart;
@@ -477,6 +492,41 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
               ],
             ),
           ),
+          if (_recentSearches.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _recentSearches.map((s) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () {
+                        _fromController.text = s.origin;
+                        _toController.text = s.destination;
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: _RidesColors.cardSurface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _RidesColors.border),
+                        ),
+                        child: Text(
+                          '${s.origin} → ${s.destination}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: _RidesColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [

@@ -6,6 +6,7 @@ class UserModel {
   final double driverRating;
   final String role;
   final bool verified;
+  final String? photoUrl;
 
   const UserModel({
     required this.id,
@@ -15,6 +16,7 @@ class UserModel {
     required this.driverRating,
     required this.role,
     required this.verified,
+    this.photoUrl,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> data, String id) {
@@ -27,6 +29,7 @@ class UserModel {
       driverRating: (data['driverRating'] as num?)?.toDouble() ?? 0.0,
       role: data['role'] as String? ?? 'passenger',
       verified: data['verified'] as bool? ?? false,
+      photoUrl: data['photoUrl'] as String?,
     );
   }
 
@@ -38,6 +41,7 @@ class UserModel {
     double? driverRating,
     String? role,
     bool? verified,
+    String? photoUrl,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -47,6 +51,7 @@ class UserModel {
       driverRating: driverRating ?? this.driverRating,
       role: role ?? this.role,
       verified: verified ?? this.verified,
+      photoUrl: photoUrl ?? this.photoUrl,
     );
   }
 }

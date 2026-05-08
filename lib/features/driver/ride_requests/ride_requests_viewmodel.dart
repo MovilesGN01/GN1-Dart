@@ -51,18 +51,21 @@ class RideRequestsViewModel extends ChangeNotifier {
           .map((doc) => RideRequestModel.fromFirestore(doc))
           .toList();
 
-      // For any request missing a name, fetch it from the users collection
+      // Enrich every request with user data (name, rating, photoUrl)
       final enriched = await Future.wait(rawRequests.map((req) async {
-        if (req.passengerName != 'Unknown') return req;
         try {
           final userSnap = await FirebaseFirestore.instance
               .collection('users')
               .doc(req.passengerId)
               .get();
-          final name = (userSnap.data()?['name'] as String?) ?? 'Unknown';
+          final data = userSnap.data();
+          final name = (data?['name'] as String?)?.isNotEmpty == true
+              ? data!['name'] as String
+              : req.passengerName;
           final rating =
-              (userSnap.data()?['reputationScore'] as num?)?.toDouble() ??
+              (data?['reputationScore'] as num?)?.toDouble() ??
                   req.passengerRating;
+          final photoUrl = data?['photoUrl'] as String?;
           return RideRequestModel(
             id: req.id,
             rideId: req.rideId,
@@ -71,6 +74,7 @@ class RideRequestsViewModel extends ChangeNotifier {
             passengerRating: rating,
             status: req.status,
             requestTime: req.requestTime,
+            passengerPhotoUrl: photoUrl,
           );
         } catch (_) {
           return req;
