@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -688,7 +689,7 @@ class _DriverAvatar extends StatelessWidget {
     if (photoUrl.isNotEmpty) {
       return CircleAvatar(
         radius: 24,
-        backgroundImage: NetworkImage(photoUrl),
+        backgroundImage: CachedNetworkImageProvider(photoUrl),
       );
     }
 

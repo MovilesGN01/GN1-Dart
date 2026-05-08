@@ -1,31 +1,39 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class NfcVerificationService {
-  static const String _endpoint =
-      'https://verifynfc-u4aratg3tq-uc.a.run.app';
+  NfcVerificationService()
+      : _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
 
-  Future<bool> verifyTag(String tagId) async {
-    final response = await http.post(
-      Uri.parse(_endpoint),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'tagId': tagId,
-      }),
-    );
+  final FirebaseFunctions _functions;
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('No se pudo verificar el tag NFC.');
+  Future<bool> verifyTag(
+    String tagId, {
+    String? rideId,
+    String? userId,
+  }) async {
+    final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+
+    final callable = _functions.httpsCallable('verifyNFC');
+
+    try {
+      final result = await callable.call(<String, dynamic>{
+        'nfcId': tagId,
+        'rideId': ?rideId,
+        'userId': ?uid,
+      });
+
+      final data = result.data;
+      if (data is Map && data['success'] == true) {
+        return true;
+      }
+      return false;
+    } on FirebaseFunctionsException catch (e) {
+      // verifyNFC throws "Invalid NFC" when the tag is not registered/active.
+      if (e.message?.toLowerCase().contains('invalid nfc') ?? false) {
+        return false;
+      }
+      rethrow;
     }
-
-    final decoded = jsonDecode(response.body);
-
-    if (decoded is Map<String, dynamic>) {
-      return (decoded['authorized'] as bool?) ?? false;
-    }
-
-    throw Exception('Respuesta inválida de verifyNFC.');
   }
 }

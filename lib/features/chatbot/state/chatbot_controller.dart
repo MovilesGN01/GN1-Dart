@@ -4,16 +4,21 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/connectivity_service.dart';
+import '../data/chatbot_history_store.dart';
 import '../data/chatbot_service.dart';
 import '../models/chat_message.dart';
 
 class ChatbotController extends ChangeNotifier {
-  ChatbotController(this._service) {
+  ChatbotController(this._service, {ChatbotHistoryStore? historyStore})
+      : _history = historyStore ?? ChatbotHistoryStore() {
     _setupConnectivityListener();
+    _restoreFuture = _restoreHistory();
   }
 
   final ChatbotService _service;
+  final ChatbotHistoryStore _history;
   StreamSubscription<bool>? _connectivitySub;
+  late final Future<void> _restoreFuture;
 
   final List<ChatMessage> _messages = [];
   // Ordered queue of pending message IDs to retry in order.
@@ -51,7 +56,8 @@ class ChatbotController extends ChangeNotifier {
     super.dispose();
   }
 
-  void loadWelcomeMessage() {
+  Future<void> loadWelcomeMessage() async {
+    await _restoreFuture;
     if (_messages.isNotEmpty) return;
     _messages.add(
       ChatMessage(
@@ -63,6 +69,18 @@ class ChatbotController extends ChangeNotifier {
       ),
     );
     notifyListeners();
+    _persist();
+  }
+
+  Future<void> _restoreHistory() async {
+    final restored = await _history.load();
+    if (restored.isEmpty || _messages.isNotEmpty) return;
+    _messages.addAll(restored);
+    notifyListeners();
+  }
+
+  void _persist() {
+    unawaited(_history.save(List.unmodifiable(_messages)));
   }
 
   Future<void> sendMessage(String text) async {
@@ -88,6 +106,7 @@ class ChatbotController extends ChangeNotifier {
       _enqueuePending(userMsg);
       _isSending = false;
       notifyListeners();
+      _persist();
       return;
     }
 
@@ -108,10 +127,13 @@ class ChatbotController extends ChangeNotifier {
   Future<void> _dispatchMessage(ChatMessage userMsg) async {
     try {
       final reply = await _service.sendMessage(userMsg.text);
+      final trimmed = reply.trim();
       _updateStatus(userMsg.id, ChatMessageStatus.sent);
       _messages.add(
         ChatMessage(
-          text: reply,
+          text: trimmed.isEmpty
+              ? 'I could not generate a response. Please rephrase.'
+              : reply,
           isUser: false,
           createdAt: DateTime.now(),
           status: ChatMessageStatus.sent,
@@ -130,6 +152,7 @@ class ChatbotController extends ChangeNotifier {
       );
     }
     notifyListeners();
+    _persist();
   }
 
   Future<void> _retryPending() async {
