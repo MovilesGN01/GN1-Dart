@@ -62,7 +62,9 @@ class RideViewModel extends ChangeNotifier {
 
   /// Subscribes to a real-time Firestore stream of available rides.
   /// The UI updates automatically whenever rides are added, modified or removed.
-  void loadAvailableRides() {
+  Future<void> loadAvailableRides() async {
+    final online = await ConnectivityService().isOnline();
+    isOffline = !online;
     _ridesSub?.cancel();
     _isLoading = true;
     _isSearchMode = false;
@@ -83,7 +85,6 @@ class RideViewModel extends ChangeNotifier {
           ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
 
         isFromCache = false;
-        isOffline = false;
         _isLoading = false;
         _errorMessage = null;
 
