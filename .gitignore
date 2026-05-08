@@ -59,3 +59,5 @@ CODEBASE.md
 
 
 .env
+# Claude Code local config
+.claude/settings.local.json
