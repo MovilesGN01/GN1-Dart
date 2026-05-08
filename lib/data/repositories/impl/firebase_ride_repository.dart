@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/cache/lru_cache.dart';
@@ -35,11 +36,17 @@ class FirebaseRideRepository implements RideRepository {
     try {
       final snapshot = await _firestore
           .collection('rides')
-          .where('status', isEqualTo: 'available')
+          .where('status', whereIn: ['available', 'active'])
           .get();
 
-      final raw = snapshot.docs.map(_sanitizeForIsolate).toList();
-      return compute(_parseRidesInIsolate, raw);
+      return snapshot.docs.map((doc) {
+        try {
+          return RideModel.fromMap(doc.data(), doc.id);
+        } catch (e) {
+          debugPrint('ERROR mapping doc ${doc.id}: $e');
+          rethrow;
+        }
+      }).toList();
     } catch (e) {
       debugPrint('ERROR in getAvailableRides: $e');
       rethrow;
@@ -50,7 +57,7 @@ class FirebaseRideRepository implements RideRepository {
   Future<List<RideModel>> getMatchingRides(String userId) async {
     final snapshot = await _firestore
         .collection('rides')
-        .where('status', isEqualTo: 'available')
+        .where('status', whereIn: ['available', 'active'])
         .get();
 
     return snapshot.docs
@@ -58,7 +65,8 @@ class FirebaseRideRepository implements RideRepository {
         .toList();
   }
 
-  /// Online-first with LRU → SQLite fallback.
+  /// Online-first with LRU → SQLite fallback. Parses Firestore documents
+  /// off the UI thread via [compute] to keep large batches jank-free.
   Future<List<RideModel>> getAvailableRidesWithFallback({
     bool forceRefresh = false,
     void Function(bool isFromCache)? onCacheStatus,
@@ -76,7 +84,7 @@ class FirebaseRideRepository implements RideRepository {
     }
 
     try {
-      final rides = await getAvailableRides();
+      final rides = await _getAvailableRidesParallel();
       _lruCache.put(key, rides);
       unawaited(_dao.insertOrReplaceAll(rides));
       debugPrint('[Repo] Firestore ok — ${rides.length} rides');
@@ -97,36 +105,48 @@ class FirebaseRideRepository implements RideRepository {
 
   void invalidateRideCache() => _lruCache.invalidateAll();
 
-  /// Online-first details fetch with LRU + persisted store fallback.
-  /// Calls [onCacheStatus] with `true` when the data shown comes from cache.
-  Future<RideDetailsModel> getRideDetailsWithFallback(
-    String rideId, {
-    bool forceRefresh = false,
-    void Function(bool isFromCache)? onCacheStatus,
+  Future<void> updateRide({
+    required String rideId,
+    String? origin,
+    String? destination,
+    DateTime? departureTime,
+    int? seatsAvailable,
+    double? price,
   }) async {
-    if (!forceRefresh) {
-      final memHit = _detailsCache.get(rideId);
-      if (memHit != null) {
-        onCacheStatus?.call(false);
-        return memHit;
-      }
+    final payload = <String, dynamic>{'rideId': rideId};
+    if (origin != null) payload['origin'] = origin;
+    if (destination != null) payload['destination'] = destination;
+    if (departureTime != null) {
+      payload['departureTime'] = departureTime.millisecondsSinceEpoch;
     }
+    if (seatsAvailable != null) payload['seatsAvailable'] = seatsAvailable;
+    if (price != null) payload['price'] = price;
 
-    try {
-      final fresh = await getRideDetails(rideId);
-      _detailsCache.put(rideId, fresh);
-      unawaited(_detailsStore.write(fresh));
-      onCacheStatus?.call(false);
-      return fresh;
-    } catch (e) {
-      final persisted = await _detailsStore.read(rideId);
-      if (persisted != null) {
-        _detailsCache.put(rideId, persisted);
-        onCacheStatus?.call(true);
-        return persisted;
-      }
-      rethrow;
-    }
+    final cf = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable('updateRide');
+    await cf.call(payload);
+    invalidateRideCache();
+  }
+
+  Future<void> deleteRide(String rideId) async {
+    final cf = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable('deleteRide');
+    await cf.call({'rideId': rideId});
+    invalidateRideCache();
+  }
+
+  Future<List<RideModel>> getDriverRides(String driverId) async {
+    final snap = await _firestore
+        .collection('rides')
+        .where('driverId', isEqualTo: driverId)
+        .get();
+    final now = DateTime.now();
+    final rides = snap.docs
+        .map((d) => RideModel.fromMap(d.data(), d.id))
+        .where((r) => r.departureTime.isAfter(now) || r.status == 'in_progress')
+        .toList()
+      ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
+    return rides;
   }
 
   @override
@@ -220,7 +240,51 @@ class FirebaseRideRepository implements RideRepository {
     _detailsCache.invalidate(rideId);
   }
 
+  /// Online-first details fetch with LRU + persisted store fallback.
+  /// Calls [onCacheStatus] with `true` when the data shown comes from cache.
+  Future<RideDetailsModel> getRideDetailsWithFallback(
+    String rideId, {
+    bool forceRefresh = false,
+    void Function(bool isFromCache)? onCacheStatus,
+  }) async {
+    if (!forceRefresh) {
+      final memHit = _detailsCache.get(rideId);
+      if (memHit != null) {
+        onCacheStatus?.call(false);
+        return memHit;
+      }
+    }
+
+    try {
+      final fresh = await getRideDetails(rideId);
+      _detailsCache.put(rideId, fresh);
+      unawaited(_detailsStore.write(fresh));
+      onCacheStatus?.call(false);
+      return fresh;
+    } catch (e) {
+      final persisted = await _detailsStore.read(rideId);
+      if (persisted != null) {
+        _detailsCache.put(rideId, persisted);
+        onCacheStatus?.call(true);
+        return persisted;
+      }
+      rethrow;
+    }
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  /// Variant of [getAvailableRides] that ships parsing to a background isolate
+  /// via [compute]. Used by [getAvailableRidesWithFallback] for warm caches.
+  Future<List<RideModel>> _getAvailableRidesParallel() async {
+    final snapshot = await _firestore
+        .collection('rides')
+        .where('status', whereIn: ['available', 'active'])
+        .get();
+
+    final raw = snapshot.docs.map(_sanitizeForIsolate).toList();
+    return compute(_parseRidesInIsolate, raw);
+  }
 
   String _normalizeDriverId(String raw) {
     if (raw.isEmpty) return '';

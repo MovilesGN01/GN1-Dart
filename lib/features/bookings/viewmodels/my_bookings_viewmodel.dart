@@ -51,6 +51,8 @@ class MyBookingsViewModel extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (_isLoading) return;
+
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {

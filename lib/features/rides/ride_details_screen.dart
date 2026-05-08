@@ -171,17 +171,17 @@ class RideDetailsScreen extends StatelessWidget {
             children: [
               Consumer<RideViewModel>(
                 builder: (_, rideVm, _) => OfflineBanner(
-                  isOffline: rideVm.isOffline || vm.isOffline,
-                  isFromCache: rideVm.isFromCache || vm.isFromCache,
+                  isOffline: rideVm.isOffline,
+                  isFromCache: rideVm.isFromCache,
                 ),
               ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: () => vm.load(rideId),
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      _HeroCard(ride: ride),
+              padding: const EdgeInsets.all(16),
+              children: [
+                _HeroCard(ride: ride),
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Trip information',
@@ -420,9 +420,9 @@ class RideDetailsScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                      const SizedBox(height: 8),
-                    ],
-                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
                 ),
               ),
             ],
