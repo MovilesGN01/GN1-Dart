@@ -8,7 +8,8 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/MovilesGN01/GN1-Dart/develop/lib/features/rides/available_rides_screen.dart\")",
       "Bash(git fetch *)",
       "Bash(git stash *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "WebFetch(domain:console.firebase.google.com)"
     ]
   }
 }
