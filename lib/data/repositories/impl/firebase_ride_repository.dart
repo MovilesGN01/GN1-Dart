@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/cache/lru_cache.dart';
@@ -28,7 +29,7 @@ class FirebaseRideRepository implements RideRepository {
     try {
       final snapshot = await _firestore
           .collection('rides')
-          .where('status', isEqualTo: 'available')
+          .where('status', whereIn: ['available', 'active'])
           .get();
 
       return snapshot.docs.map((doc) {
@@ -49,7 +50,7 @@ class FirebaseRideRepository implements RideRepository {
   Future<List<RideModel>> getMatchingRides(String userId) async {
     final snapshot = await _firestore
         .collection('rides')
-        .where('status', isEqualTo: 'available')
+        .where('status', whereIn: ['available', 'active'])
         .get();
 
     return snapshot.docs
@@ -95,6 +96,50 @@ class FirebaseRideRepository implements RideRepository {
   }
 
   void invalidateRideCache() => _lruCache.invalidateAll();
+
+  Future<void> updateRide({
+    required String rideId,
+    String? origin,
+    String? destination,
+    DateTime? departureTime,
+    int? seatsAvailable,
+    double? price,
+  }) async {
+    final payload = <String, dynamic>{'rideId': rideId};
+    if (origin != null) payload['origin'] = origin;
+    if (destination != null) payload['destination'] = destination;
+    if (departureTime != null) {
+      payload['departureTime'] = departureTime.millisecondsSinceEpoch;
+    }
+    if (seatsAvailable != null) payload['seatsAvailable'] = seatsAvailable;
+    if (price != null) payload['price'] = price;
+
+    final cf = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable('updateRide');
+    await cf.call(payload);
+    invalidateRideCache();
+  }
+
+  Future<void> deleteRide(String rideId) async {
+    final cf = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable('deleteRide');
+    await cf.call({'rideId': rideId});
+    invalidateRideCache();
+  }
+
+  Future<List<RideModel>> getDriverRides(String driverId) async {
+    final snap = await _firestore
+        .collection('rides')
+        .where('driverId', isEqualTo: driverId)
+        .get();
+    final now = DateTime.now();
+    final rides = snap.docs
+        .map((d) => RideModel.fromMap(d.data(), d.id))
+        .where((r) => r.departureTime.isAfter(now) || r.status == 'in_progress')
+        .toList()
+      ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
+    return rides;
+  }
 
   @override
   Future<RideDetailsModel> getRideDetails(String rideId) async {

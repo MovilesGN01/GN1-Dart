@@ -55,7 +55,7 @@ class RegisterViewModel extends ChangeNotifier {
 
   void setRole(String value) {
     role = value;
-    showVehicleField = (value == 'driver');
+    showVehicleField = (value == 'driver' || value == 'both');
     notifyListeners();
   }
 
@@ -72,7 +72,7 @@ class RegisterViewModel extends ChangeNotifier {
     if (password.length < 6) return 'Password must be at least 6 characters';
     if (password != confirmPassword) return 'Passwords do not match';
     if (gender.isEmpty) return 'Please select your gender';
-    if (role == 'driver') {
+    if (role == 'driver' || role == 'both') {
       final plate = vehiclePlate.trim().toUpperCase();
       if (plate.isEmpty) return 'Vehicle plate is required for drivers';
       final plateRegex = RegExp(r'^[A-Z]{3}\d{3}$');

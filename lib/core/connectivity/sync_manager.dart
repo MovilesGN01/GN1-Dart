@@ -15,6 +15,7 @@ class SyncManager {
 
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
   final ConnectivityService _connectivity = ConnectivityService();
+  static const _table = 'pending_operations';
   StreamSubscription<bool>? _sub;
 
   void init() {
@@ -25,7 +26,7 @@ class SyncManager {
 
   Future<void> enqueue(String type, String payloadJson) async {
     final db = await DatabaseHelper().database;
-    await db.insert('pending_operations', {
+    await db.insert(_table, {
       'id': const Uuid().v4(),
       'type': type,
       'payload': payloadJson,
@@ -35,9 +36,19 @@ class SyncManager {
     debugPrint('[SyncManager] enqueued $type');
   }
 
+  Future<List<Map<String, dynamic>>> pendingAll() async {
+    final db = await DatabaseHelper().database;
+    return db.query(_table, orderBy: 'created_at ASC');
+  }
+
+  Future<void> remove(String id) async {
+    final db = await DatabaseHelper().database;
+    await db.delete(_table, where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<void> processPending() async {
     final db = await DatabaseHelper().database;
-    final rows = await db.query('pending_operations', orderBy: 'created_at ASC');
+    final rows = await db.query(_table, orderBy: 'created_at ASC');
     if (rows.isEmpty) return;
 
     debugPrint('[SyncManager] processing ${rows.length} pending operations');
@@ -55,7 +66,7 @@ class SyncManager {
             'rideId': data['rideId'],
             'userId': data['userId'],
           });
-          await db.delete('pending_operations', where: 'id = ?', whereArgs: [id]);
+          await db.delete(_table, where: 'id = ?', whereArgs: [id]);
           debugPrint('[SyncManager] reserve_ride synced: $id');
         } else if (type == 'create_ride') {
           final data = jsonDecode(payload) as Map<String, dynamic>;
@@ -63,22 +74,22 @@ class SyncManager {
             data['departureTime'] as int,
           );
           if (depTime.isBefore(DateTime.now())) {
-            await db.delete('pending_operations', where: 'id = ?', whereArgs: [id]);
+            await db.delete(_table, where: 'id = ?', whereArgs: [id]);
             debugPrint('[SyncManager] create_ride expired, discarded: $id');
             continue;
           }
           await _functions.httpsCallable('createRide').call(data);
-          await db.delete('pending_operations', where: 'id = ?', whereArgs: [id]);
+          await db.delete(_table, where: 'id = ?', whereArgs: [id]);
           debugPrint('[SyncManager] create_ride synced: $id');
         }
       } catch (e) {
         debugPrint('[SyncManager] failed ($type, retry=$retryCount): $e');
         if (retryCount >= 3) {
-          await db.delete('pending_operations', where: 'id = ?', whereArgs: [id]);
+          await db.delete(_table, where: 'id = ?', whereArgs: [id]);
           debugPrint('[SyncManager] max retries reached, discarded: $id');
         } else {
           await db.update(
-            'pending_operations',
+            _table,
             {'retry_count': retryCount + 1},
             where: 'id = ?',
             whereArgs: [id],

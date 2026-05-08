@@ -15,6 +15,7 @@ import 'features/auth/auth_viewmodel.dart';
 import 'features/chatbot/data/chatbot_service.dart';
 import 'features/chatbot/state/chatbot_controller.dart';
 import 'features/home/weather_viewmodel.dart';
+import 'features/notifications/notifications_viewmodel.dart';
 import 'features/rides/ride_viewmodel.dart';
 import 'firebase_options.dart';
 
@@ -63,6 +64,9 @@ class UniRideBootstrap extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => WeatherViewModel(OpenMeteoRepository()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => NotificationsViewModel(),
         ),
       ],
       child: const UniRideApp(),
