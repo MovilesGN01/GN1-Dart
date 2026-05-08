@@ -243,7 +243,7 @@ class _RegisterBodyState extends State<_RegisterBody> {
                               onTap: () => vm.setRole('passenger'),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: _RoleButton(
                               label: 'Driver',
@@ -252,8 +252,27 @@ class _RegisterBodyState extends State<_RegisterBody> {
                               onTap: () => vm.setRole('driver'),
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _RoleButton(
+                              label: 'Both',
+                              icon: Icons.people,
+                              selected: vm.role == 'both',
+                              onTap: () => vm.setRole('both'),
+                            ),
+                          ),
                         ],
                       ),
+                      if (vm.role == 'both') ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'You can switch between modes in your profile',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: _Colors.muted,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Gender selector

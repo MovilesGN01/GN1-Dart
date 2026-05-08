@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -9,8 +10,10 @@ import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 
 import '../../core/location_utils.dart';
 import '../../data/models/ride_model.dart';
+import '../../data/services/ride_ranking_service.dart';
 import '../../features/rides/ride_viewmodel.dart';
 import '../../shared/widgets/location_disabled_banner.dart';
+import '../../shared/widgets/offline_banner.dart';
 
 // ── Local colour palette ──────────────────────────────────────────────────────
 abstract final class _RidesColors {
@@ -44,12 +47,6 @@ String _fmtPrice(double p) {
   }
   return '\$$n';
 }
-
-
-double _rankScore(RideModel r) =>
-    (r.driverRating * 0.5) +
-    (r.punctualityRate * 0.3) +
-    (r.seatsAvailable * 0.2);
 
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -164,7 +161,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
   }
 
   // Level 1 — Primary filter (Search button)
-  void _onSearch() {
+  Future<void> _onSearch() async {
     final allRides = context.read<RideViewModel>().rides;
     final from = _fromController.text.trim().toLowerCase();
     final to = _toController.text.trim().toLowerCase();
@@ -187,7 +184,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
         windowEnd = now.add(const Duration(minutes: 30));
     }
 
-    final results = allRides.where((r) {
+    final filtered = allRides.where((r) {
       if (from.isNotEmpty && !r.origin.toLowerCase().contains(from)) return false;
       if (to.isNotEmpty && !r.destination.toLowerCase().contains(to)) return false;
       if (r.departureTime.isBefore(windowStart) || r.departureTime.isAfter(windowEnd)) {
@@ -196,11 +193,15 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
       return true;
     }).toList();
 
-    setState(() {
-      _filteredRides = results;
-      _hasSearched = true;
-      _activeFilter = 'All';
-    });
+    final ranked = await RideRankingService().rankAndFilter(rides: filtered);
+
+    if (mounted) {
+      setState(() {
+        _filteredRides = ranked;
+        _hasSearched = true;
+        _activeFilter = 'All';
+      });
+    }
   }
 
   // Level 2 — Secondary filter (chips), applied on top of _filteredRides
@@ -232,11 +233,7 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
     final now = DateTime.now();
     final upcomingRides = vm.rides.where((r) => r.departureTime.isAfter(now)).toList();
     final sourceList = _hasSearched ? _filteredRides : upcomingRides;
-    List<RideModel> displayed = _applyChipFilter(sourceList);
-    if (_hasSearched) {
-      displayed = List<RideModel>.from(displayed)
-        ..sort((a, b) => _rankScore(b).compareTo(_rankScore(a)));
-    }
+    final List<RideModel> displayed = _applyChipFilter(sourceList);
 
     final sectionHeader = _hasSearched ? 'RECOMMENDED RIDES' : 'AVAILABLE RIDES';
 
@@ -276,7 +273,16 @@ class _AvailableRidesScreenState extends State<AvailableRidesScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Consumer<RideViewModel>(
+                builder: (_, vm, _) => OfflineBanner(
+                  isOffline: vm.isOffline,
+                  isFromCache: vm.isFromCache,
+                ),
+              ),
               if (_locationServiceDisabled) const LocationDisabledBanner(),
+              if (vm.isOffline) const _CacheOfflineBanner(isOffline: true),
+              if (!vm.isOffline && vm.isFromCache)
+                const _CacheOfflineBanner(isOffline: false),
               _buildSearchSummaryCard(),
               _FilterChipsRow(
                 activeFilter: _activeFilter,
@@ -605,7 +611,7 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _RideCard extends StatelessWidget {
+class _RideCard extends StatefulWidget {
   const _RideCard({
     required this.ride,
     required this.rank,
@@ -617,7 +623,80 @@ class _RideCard extends StatelessWidget {
   final bool isBestMatch;
 
   @override
+  State<_RideCard> createState() => _RideCardState();
+}
+
+class _RideCardState extends State<_RideCard> {
+  bool _isRequesting = false;
+
+  Future<void> _onReserve() async {
+    setState(() => _isRequesting = true);
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('requestRide')
+          .call({'rideId': widget.ride.id});
+
+      if (mounted) {
+        context
+            .read<RideViewModel>()
+            .requestedRideIds
+            .add(widget.ride.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Request sent to ${widget.ride.driverName}!',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: _RidesColors.primary,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.message ?? 'Could not send request. Try again.',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Unexpected error. Try again.',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRequesting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final ride = widget.ride;
+    final rank = widget.rank;
+    final isBestMatch = widget.isBestMatch;
+    final alreadyRequested =
+        context.watch<RideViewModel>().requestedRideIds.contains(ride.id);
     final String timeStr = _fmtTime(ride.departureTime);
     final String priceStr = _fmtPrice(ride.price);
 
@@ -884,47 +963,112 @@ class _RideCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                SizedBox(
-                  width: 100,
-                  height: 40,
-                  child: ElevatedButton(
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Ride reserved with ${ride.driverName}!',
-                          style: GoogleFonts.poppins(color: Colors.white),
+                if (alreadyRequested)
+                  Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle,
+                            size: 14, color: Color(0xFF16A34A)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Solicitado',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF16A34A),
+                          ),
                         ),
+                      ],
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: 100,
+                    height: 40,
+                    child: ElevatedButton(
+                      onPressed: _isRequesting ? null : _onReserve,
+                      style: ElevatedButton.styleFrom(
                         backgroundColor: _RidesColors.primary,
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.zero,
+                        elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _RidesColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.zero,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: Text(
-                      'Reserve',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+                      child: _isRequesting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              'Reserve',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
-                ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Cache / offline banner ────────────────────────────────────────────────────
+
+class _CacheOfflineBanner extends StatelessWidget {
+  const _CacheOfflineBanner({required this.isOffline});
+
+  final bool isOffline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: isOffline ? const Color(0xFFFEF3C7) : const Color(0xFFEFF6FF),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      child: Row(
+        children: [
+          Icon(
+            isOffline ? Icons.wifi_off : Icons.history,
+            size: 15,
+            color: isOffline
+                ? const Color(0xFF92400E)
+                : const Color(0xFF1D4ED8),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isOffline
+                  ? 'Sin conexión — mostrando rides en caché'
+                  : 'Mostrando rides desde caché local',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: isOffline
+                    ? const Color(0xFF92400E)
+                    : const Color(0xFF1D4ED8),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

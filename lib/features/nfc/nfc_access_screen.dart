@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/connectivity_service.dart';
+import '../../shared/widgets/bottom_nav_bar.dart';
 import 'nfc_service.dart';
-import 'package:uniride/shared/widgets/bottom_nav_bar.dart';
 import 'nfc_verification_service.dart';
 
 enum _NfcStatus {
@@ -11,6 +15,7 @@ enum _NfcStatus {
   authorized,
   rejected,
   error,
+  pendingSync,
 }
 
 class NfcAccessScreen extends StatefulWidget {
@@ -23,43 +28,156 @@ class NfcAccessScreen extends StatefulWidget {
 class _NfcAccessScreenState extends State<NfcAccessScreen> {
   final NfcService _service = NfcService();
   final NfcVerificationService _verificationService = NfcVerificationService();
-  
+
   _NfcStatus _status = _NfcStatus.ready;
   String _statusMessage = 'Acerca tu carné o tu celular para validar acceso.';
   NfcScanResult? _lastScan;
+  bool _isSyncing = false;
 
-Future<void> _startScan() async {
-  setState(() {
-    _status = _NfcStatus.scanning;
-    _statusMessage = 'Escaneando... acerca el tag al dispositivo.';
-  });
+  StreamSubscription<bool>? _connectivitySub;
 
-  try {
-    final result = await _service.scan();
+  static const _kPendingTagKey = 'pending_nfc_tag_id';
+  static const _kPendingTagType = 'pending_nfc_tag_type';
+  static const _kPendingTagStandard = 'pending_nfc_tag_standard';
 
-    final isAuthorized =
-        await _verificationService.verifyTag(result.id.toUpperCase());
+  @override
+  void initState() {
+    super.initState();
+    _setupConnectivityListener();
+    _restorePendingTag();
+  }
 
-    setState(() {
-      _lastScan = result;
-      _status = isAuthorized ? _NfcStatus.authorized : _NfcStatus.rejected;
-      _statusMessage = isAuthorized
-          ? 'Acceso validado. Puedes abordar o ingresar al punto de encuentro.'
-          : 'Tag no autorizado para este acceso.';
-    });
-  } catch (e) {
-    setState(() {
-      _status = _NfcStatus.error;
-      _statusMessage = e.toString().replaceFirst('Exception: ', '');
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
+
+  void _setupConnectivityListener() {
+    _connectivitySub =
+        ConnectivityService().onStatusChanged.listen((online) {
+      if (online && _status == _NfcStatus.pendingSync) {
+        _retrySyncPendingTag();
+      }
     });
   }
-}
+
+  Future<void> _restorePendingTag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tagId = prefs.getString(_kPendingTagKey);
+    if (tagId == null || tagId.isEmpty) return;
+
+    final tagType = prefs.getString(_kPendingTagType) ?? 'unknown';
+    final tagStandard = prefs.getString(_kPendingTagStandard) ?? 'unknown';
+
+    setState(() {
+      _lastScan = NfcScanResult(
+        id: tagId,
+        type: tagType,
+        standard: tagStandard,
+      );
+      _status = _NfcStatus.pendingSync;
+      _statusMessage =
+          'Hay una verificación pendiente. Se sincronizará al reconectar.';
+    });
+
+    // If already online, sync immediately.
+    final online = await ConnectivityService.instance.isOnline;
+    if (online) _retrySyncPendingTag();
+  }
+
+  Future<void> _startScan() async {
+    setState(() {
+      _status = _NfcStatus.scanning;
+      _statusMessage = 'Escaneando... acerca el tag al dispositivo.';
+    });
+
+    try {
+      final result = await _service.scan();
+
+      final online = await ConnectivityService.instance.isOnline;
+
+      if (!online) {
+        await _savePendingTag(result);
+        setState(() {
+          _lastScan = result;
+          _status = _NfcStatus.pendingSync;
+          _statusMessage =
+              'Tag escaneado sin conexión. Se verificará al reconectar.';
+        });
+        return;
+      }
+
+      final isAuthorized =
+          await _verificationService.verifyTag(result.id.toUpperCase());
+
+      setState(() {
+        _lastScan = result;
+        _status =
+            isAuthorized ? _NfcStatus.authorized : _NfcStatus.rejected;
+        _statusMessage = isAuthorized
+            ? 'Acceso validado. Puedes abordar o ingresar al punto de encuentro.'
+            : 'Tag no autorizado para este acceso.';
+      });
+    } catch (e) {
+      setState(() {
+        _status = _NfcStatus.error;
+        _statusMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _retrySyncPendingTag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tagId = prefs.getString(_kPendingTagKey);
+    if (tagId == null || tagId.isEmpty || _isSyncing) return;
+
+    setState(() => _isSyncing = true);
+
+    try {
+      final isAuthorized =
+          await _verificationService.verifyTag(tagId.toUpperCase());
+
+      await _clearPendingTag(prefs);
+
+      setState(() {
+        _isSyncing = false;
+        _status =
+            isAuthorized ? _NfcStatus.authorized : _NfcStatus.rejected;
+        _statusMessage = isAuthorized
+            ? 'Acceso validado (sincronizado). Puedes abordar o ingresar.'
+            : 'Tag no autorizado para este acceso.';
+      });
+    } catch (e) {
+      setState(() {
+        _isSyncing = false;
+        _status = _NfcStatus.pendingSync;
+        _statusMessage =
+            'No se pudo verificar. Se reintentará cuando haya conexión.';
+      });
+    }
+  }
+
+  Future<void> _savePendingTag(NfcScanResult result) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPendingTagKey, result.id);
+    await prefs.setString(_kPendingTagType, result.type);
+    await prefs.setString(_kPendingTagStandard, result.standard);
+  }
+
+  Future<void> _clearPendingTag(SharedPreferences prefs) async {
+    await prefs.remove(_kPendingTagKey);
+    await prefs.remove(_kPendingTagType);
+    await prefs.remove(_kPendingTagStandard);
+  }
 
   void _reset() {
+    SharedPreferences.getInstance().then((prefs) => _clearPendingTag(prefs));
     setState(() {
       _status = _NfcStatus.ready;
       _statusMessage = 'Acerca tu carné o tu celular para validar acceso.';
       _lastScan = null;
+      _isSyncing = false;
     });
   }
 
@@ -85,12 +203,15 @@ Future<void> _startScan() async {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          // ── Status card ───────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: statusData.background,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: statusData.accent.withValues(alpha: 0.18)),
+              border: Border.all(
+                color: statusData.accent.withValues(alpha: 0.18),
+              ),
             ),
             child: Row(
               children: [
@@ -101,7 +222,12 @@ Future<void> _startScan() async {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(statusData.icon, color: statusData.accent),
+                  child: _isSyncing
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(statusData.icon, color: statusData.accent),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -109,7 +235,7 @@ Future<void> _startScan() async {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        statusData.title,
+                        _isSyncing ? 'Sincronizando…' : statusData.title,
                         style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
@@ -131,6 +257,8 @@ Future<void> _startScan() async {
             ),
           ),
           const SizedBox(height: 20),
+
+          // ── NFC icon area ─────────────────────────────────────────────────
           Container(
             height: 220,
             decoration: BoxDecoration(
@@ -145,7 +273,9 @@ Future<void> _startScan() async {
                   Icon(
                     _status == _NfcStatus.scanning
                         ? Icons.nfc_rounded
-                        : Icons.contactless_rounded,
+                        : _status == _NfcStatus.pendingSync
+                            ? Icons.schedule_rounded
+                            : Icons.contactless_rounded,
                     size: 72,
                     color: statusData.accent,
                   ),
@@ -153,7 +283,9 @@ Future<void> _startScan() async {
                   Text(
                     _status == _NfcStatus.scanning
                         ? 'Scanning...'
-                        : 'Ready to scan',
+                        : _status == _NfcStatus.pendingSync
+                            ? 'Pending sync'
+                            : 'Ready to scan',
                     style: GoogleFonts.poppins(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -174,16 +306,23 @@ Future<void> _startScan() async {
             ),
           ),
           const SizedBox(height: 18),
+
+          // ── Action buttons ────────────────────────────────────────────────
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _status == _NfcStatus.scanning ? null : _startScan,
+                  onPressed:
+                      (_status == _NfcStatus.scanning || _isSyncing)
+                          ? null
+                          : _startScan,
                   icon: const Icon(Icons.nfc_rounded),
                   label: Text(
                     _status == _NfcStatus.scanning
                         ? 'Scanning...'
-                        : 'Start scan',
+                        : _isSyncing
+                            ? 'Syncing...'
+                            : 'Start scan',
                   ),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(0, 54),
@@ -224,6 +363,8 @@ Future<void> _startScan() async {
             ],
           ),
           const SizedBox(height: 18),
+
+          // ── Last scan card ────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -255,7 +396,9 @@ Future<void> _startScan() async {
                       ? 'Authorized'
                       : _status == _NfcStatus.rejected
                           ? 'Rejected'
-                          : 'Pending',
+                          : _status == _NfcStatus.pendingSync
+                              ? 'Pending sync'
+                              : 'Pending',
                 ),
               ],
             ),
@@ -332,6 +475,13 @@ Future<void> _startScan() async {
           icon: Icons.error_rounded,
           accent: Color(0xFFEF4444),
           background: Color(0xFFFEE2E2),
+        );
+      case _NfcStatus.pendingSync:
+        return const _StatusUi(
+          title: 'Pending sync',
+          icon: Icons.schedule_rounded,
+          accent: Color(0xFFC2410C),
+          background: Color(0xFFFFF7ED),
         );
     }
   }

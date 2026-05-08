@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:uniride/features/auth/auth_viewmodel.dart';
 
 abstract final class _NavColors {
   static const selected = Color(0xFF1F5DFF);
@@ -28,9 +30,17 @@ class UniRideBottomNav extends StatelessWidget {
       unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11),
       onTap: (index) {
         if (index == 0) context.go('/home');
-        if (index == 1) context.go('/rides');
-        if (index == 2) context.go('/community');
-        if (index == 3) context.go('/profile');
+        if (index == 1) {
+          final authVm = context.read<AuthViewModel>();
+          final role = authVm.currentUser?.role ?? 'passenger';
+          final activeMode = authVm.activeMode;
+          final isDriverMode = role == 'driver' ||
+              (role == 'both' && activeMode == 'driver');
+          context.go(isDriverMode ? '/driver/my-rides' : '/rides');
+        }
+        if (index == 2) context.go('/bookings');
+        if (index == 3) context.go('/community');
+        if (index == 4) context.go('/profile');
       },
       items: const [
         BottomNavigationBarItem(
@@ -42,6 +52,11 @@ class UniRideBottomNav extends StatelessWidget {
           icon: Icon(Icons.directions_car_outlined),
           activeIcon: Icon(Icons.directions_car),
           label: 'Rides',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.event_seat_outlined),
+          activeIcon: Icon(Icons.event_seat),
+          label: 'My Bookings',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.group_outlined),

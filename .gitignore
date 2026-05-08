@@ -56,3 +56,6 @@ macos/Flutter/GeneratedPluginRegistrant.swift
 macos/Flutter/ephemeral/
 windows/flutter/ephemeral/
 CODEBASE.md
+
+
+.env
